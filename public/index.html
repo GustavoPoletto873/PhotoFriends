@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Friends — Entrar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">📸</div>
+        <div class="login-logo-text">Photo Friends</div>
+        <div class="login-tagline">Suas fotos com os amigos</div>
+      </div>
+
+      <div class="tab-switcher">
+        <button class="tab-btn active" data-tab="login">Entrar</button>
+        <button class="tab-btn" data-tab="register">Cadastrar</button>
+      </div>
+
+      <div id="error-msg" class="login-error"></div>
+
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label class="form-label">Usuário</label>
+          <input type="text" class="input" id="login-username" placeholder="seu_usuario" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Senha</label>
+          <input type="password" class="input" id="login-password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.85rem">
+          Entrar
+        </button>
+      </form>
+
+      <form id="register-form" class="login-form" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Seu nome</label>
+          <input type="text" class="input" id="reg-name" placeholder="Ex: Pedro" autocomplete="name" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Usuário</label>
+          <input type="text" class="input" id="reg-username" placeholder="Ex: pedro_souza" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Senha</label>
+          <input type="password" class="input" id="reg-password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.85rem">
+          Criar conta grátis
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <script src="/js/login.js"></script>
+</body>
+</html>
