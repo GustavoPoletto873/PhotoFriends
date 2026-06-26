@@ -9,9 +9,14 @@ except ImportError:
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-n+cgb$b01)xvr@59h+p#sbbj^p)1bt=7u2!a0i35&gjo6dfyj!'
-DEBUG = True
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-n+cgb$b01)xvr@59h+p#sbbj^p)1bt=7u2!a0i35&gjo6dfyj!')
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.onrender.com',
+    'http://127.0.0.1:8000',
+    'http://localhost:8000',
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
