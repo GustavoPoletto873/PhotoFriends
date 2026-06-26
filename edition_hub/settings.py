@@ -107,6 +107,9 @@ else:
 # Token de redefinição de senha expira em 24h
 PASSWORD_RESET_TIMEOUT = 86400
 
+# SMTP timeout — evita bloquear o worker do Render indefinidamente
+EMAIL_TIMEOUT = 10
+
 # Permite login por e-mail ou username
 AUTHENTICATION_BACKENDS = [
     'landing.backends.EmailOrUsernameBackend',
