@@ -1,0 +1,119 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — Meus uploads{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link active">Uploads</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.profile.avatar_url %}
+      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+    {% else %}
+      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+    {% endif %}
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <!-- Header -->
+    <div class="uploads-header">
+      <div>
+        <h1 class="albums-title">Meus <span class="albums-title-accent">uploads</span></h1>
+        <p class="albums-subtitle">Tudo que você enviou, organizado por álbum</p>
+      </div>
+      <div class="uploads-stats">
+        <div class="stat-chip">📷 {{ total_photos }} foto{% if total_photos != 1 %}s{% endif %}</div>
+        <div class="stat-chip">🎥 {{ total_videos }} vídeo{% if total_videos != 1 %}s{% endif %}</div>
+        <div class="stat-chip">📁 {{ albums_with_media|length }} álbum{% if albums_with_media|length != 1 %}ns{% endif %}</div>
+      </div>
+    </div>
+
+    {% if albums_with_media %}
+
+      {% for group in albums_with_media %}
+        <div class="uploads-album-section">
+
+          <!-- Album section header -->
+          <div class="uploads-album-header">
+            <a href="{% url 'album_detail' group.album.id %}" class="uploads-album-link">
+              {{ group.album.name }}
+            </a>
+            <span class="uploads-album-count">
+              {{ group.items|length }} item{% if group.items|length != 1 %}s{% endif %}
+            </span>
+          </div>
+
+          <!-- Photo masonry grid -->
+          <div class="photo-grid">
+            {% for m in group.items %}
+              <div class="photo-item"
+                   data-url="{{ m.cloudinary_url }}"
+                   data-type="{{ m.media_type }}"
+                   data-uploader="{{ m.uploaded_by.get_full_name|default:m.uploaded_by.username }}"
+                   data-date="{{ m.display_date|date:'d/m/Y H:i' }}"
+                   data-id="{{ m.id }}"
+                   data-mine="1">
+                {% if m.media_type == 'video' %}
+                  <video src="{{ m.cloudinary_url }}" preload="metadata" muted></video>
+                  <div class="photo-item-video-badge">▶</div>
+                {% else %}
+                  <img src="{{ m.cloudinary_url }}" alt="{{ m.filename }}" loading="lazy">
+                {% endif %}
+                <div class="photo-item-overlay">
+                  <span class="photo-item-uploader">{{ m.display_date|date:"d M Y" }}</span>
+                  <button type="button" class="photo-item-delete" data-media-id="{{ m.id }}">✕</button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+
+        </div>
+      {% endfor %}
+
+    {% else %}
+      <div class="albums-empty">
+        <div class="albums-empty-icon">📤</div>
+        <h3>Nenhum upload ainda</h3>
+        <p>Entre em um álbum e envie suas primeiras fotos!</p>
+        <a href="{% url 'albums_list' %}" class="btn btn-primary" style="text-decoration:none;">Ver álbuns</a>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <a class="lightbox-download" id="lb-download" href="#" target="_blank" title="Baixar">⬇</a>
+  <button class="lightbox-close" id="lb-close">✕</button>
+  <button class="lightbox-nav lightbox-prev" id="lb-prev">&#8249;</button>
+  <button class="lightbox-nav lightbox-next" id="lb-next">&#8250;</button>
+  <img class="lightbox-media" id="lb-img" src="" alt="" style="display:none">
+  <video class="lightbox-media" id="lb-video" controls style="display:none"></video>
+  <div class="lightbox-info" id="lb-info"></div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+</script>
+<script src="{% static 'landing/js/app.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Photo Friends{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'landing/css/style.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <canvas id="canvas-antigravity"></canvas>
+
+  {% block body %}{% endblock %}
+
+  {% if user.is_authenticated %}
+  <span class="fab-sair-wrap">
+    <a href="{% url 'logout' %}" class="fab-sair" title="Sair">
+      <span class="fab-sair-icon">🚪</span>
+      <span class="fab-sair-label">SAIR</span>
+    </a>
+  </span>
+  {% endif %}
+
+  <script src="{% static 'landing/js/script.js' %}?v={% now 'U' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,56 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — Suas fotos com os amigos{% endblock %}
+
+{% block body %}
+<div class="content-overlay">
+  <nav class="nav-bar">
+    <div class="nav-logo">
+      <span class="logo-icon">◉</span>
+      <span class="logo-text">Photo Friends</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#" class="nav-link">Sobre</a></li>
+      <li><a href="{% url 'albums_list' %}" class="nav-link">Álbuns</a></li>
+      <li><a href="#" class="nav-link">Como funciona</a></li>
+      {% if user.is_authenticated %}
+        <li><a href="{% url 'albums_list' %}" class="nav-link nav-link--cta">Meus álbuns</a></li>
+        <li><a href="{% url 'logout' %}" class="nav-link nav-link--cta" style="border-color:rgba(244,63,142,0.35);color:rgba(244,63,142,0.9);">Sair</a></li>
+      {% else %}
+        <li><a href="{% url 'login' %}" class="nav-link nav-link--cta">Entrar</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <main class="hero">
+    <h1 class="hero__title">
+      <span class="title-line title-line--1">Photo</span>
+      <span class="title-line title-line--2">Friends</span>
+    </h1>
+
+    <p class="hero__subtitle">
+      Crie álbuns, suba fotos e vídeos dos seus rolês.<br>
+      Todo mundo com conta pode ver e contribuir.
+    </p>
+
+    <div class="hero__actions">
+      {% if user.is_authenticated %}
+        <a href="{% url 'albums_list' %}" class="btn btn--primary">Meus álbuns</a>
+      {% else %}
+        <a href="{% url 'register' %}" class="btn btn--primary">Criar conta grátis</a>
+        <a href="{% url 'login' %}" class="btn btn--ghost">Entrar</a>
+      {% endif %}
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p class="footer__text">© 2026 Photo Friends. Feito com amor pela galera.</p>
+    <div class="footer__socials">
+      <a href="#" class="social-link" aria-label="Instagram">IG</a>
+      <a href="#" class="social-link" aria-label="GitHub">GH</a>
+      <a href="#" class="social-link" aria-label="Contato">ME</a>
+    </div>
+  </footer>
+</div>
+{% endblock %}

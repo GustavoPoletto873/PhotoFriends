@@ -1,0 +1,244 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — {{ community.name }}{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link active">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.profile.avatar_url %}
+      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+    {% else %}
+      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+    {% endif %}
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <!-- Community header -->
+    <div class="community-detail-header">
+      <a href="{% url 'communities_list' %}" class="community-back">← Comunidades</a>
+
+      <div class="community-title-row">
+        <div>
+          <h1 class="community-title">{{ community.name }}</h1>
+          {% if community.description %}
+            <p class="community-desc">{{ community.description }}</p>
+          {% endif %}
+          <div class="community-meta-row">
+            <span class="community-stat">📁 {{ albums|length }} álbum{% if albums|length != 1 %}ns{% endif %}</span>
+            <span class="community-stat">·</span>
+            <span class="community-stat">👥 {{ member_count }} membro{% if member_count != 1 %}s{% endif %}</span>
+          </div>
+          <div class="community-members-bar">
+            {% for m in memberships %}
+              <span class="community-member-chip">
+                <span class="role-dot {% if m.role == 'admin' %}role-dot--admin{% endif %}"></span>
+                {% if m.user.profile.avatar_url %}
+                  <img src="{{ m.user.profile.avatar_url }}" class="member-avatar" alt="{{ m.user.get_full_name }}">
+                {% else %}
+                  <span class="member-avatar member-avatar--text">{{ m.user.first_name|first|upper }}</span>
+                {% endif %}
+                {{ m.user.first_name }}
+                {% if m.role == 'admin' %}<span style="color:var(--app-pink);font-size:0.65rem;">admin</span>{% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="community-actions">
+          {% if is_admin %}
+            <button class="btn btn-ghost btn-sm" id="invite-btn">+ Convidar</button>
+            <button class="btn btn-primary btn-sm" id="new-album-btn">+ Álbum</button>
+            <form method="post" action="{% url 'delete_community' community.id %}" id="delete-community-form" style="display:inline">
+              {% csrf_token %}
+              <button type="button" class="btn btn-danger btn-sm" id="delete-community-btn">Deletar</button>
+            </form>
+          {% else %}
+            <form method="post" action="{% url 'leave_community' community.id %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-sm"
+                      onclick="return confirm('Sair de {{ community.name }}?')">Sair</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Albums inside this community -->
+    <div class="community-albums-header">
+      <span class="community-albums-title">Álbuns da comunidade</span>
+    </div>
+
+    {% if albums %}
+      <div class="folders-grid">
+        {% for album in albums %}
+          <div class="folder-wrapper">
+            <div class="folder-tab" style="background:{{ album.tab_color }}"></div>
+            <a href="{% url 'album_detail' album.id %}" class="folder-card">
+              {% if album.cover_url %}
+                <img src="{{ album.cover_url }}" class="folder-cover" alt="{{ album.name }}" loading="lazy">
+              {% else %}
+                <div class="folder-cover-gradient" style="background:{{ album.gradient }}"></div>
+              {% endif %}
+              <div class="folder-info">
+                <div class="folder-name">{{ album.name }}</div>
+                <div class="folder-meta">
+                  {{ album.media.count }} item{% if album.media.count != 1 %}s{% endif %}
+                  · por {{ album.created_by.first_name }}
+                </div>
+                <div class="folder-date">{{ album.created_at|date:"d M Y" }}</div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
+
+        {% if is_admin %}
+          <div class="folder-wrapper folder-wrapper--new">
+            <button class="folder-card folder-card--new" id="new-album-card-btn">
+              <div class="folder-new-icon">+</div>
+              <div class="folder-info">
+                <div class="folder-name">Novo álbum</div>
+                <div class="folder-meta">Criar álbum aqui</div>
+              </div>
+            </button>
+          </div>
+        {% endif %}
+      </div>
+
+    {% else %}
+      <div class="albums-empty">
+        <div class="albums-empty-icon">📷</div>
+        <h3>Nenhum álbum ainda</h3>
+        <p>{% if is_admin %}Crie o primeiro álbum desta comunidade!{% else %}Aguarde um admin criar um álbum.{% endif %}</p>
+        {% if is_admin %}
+          <button class="btn btn-primary" id="new-album-empty-btn">+ Criar álbum</button>
+        {% endif %}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- New album modal -->
+<div class="modal-overlay" id="new-album-modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Novo álbum em "{{ community.name }}"</h2>
+    <form method="post" action="{% url 'community_detail' community.id %}">
+      {% csrf_token %}
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label">Nome do álbum</label>
+          <input type="text" name="name" class="input" placeholder="Ex: Viagem a SP — Jan 2026" required autofocus>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição (opcional)</label>
+          <input type="text" name="description" class="input" placeholder="Sobre o que é esse álbum...">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="cancel-album-btn">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Criar álbum</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Invite modal -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Convidar para "{{ community.name }}"</h2>
+    <div class="modal-form">
+      <div class="form-group">
+        <label class="form-label">Username do amigo</label>
+        <input type="text" class="input" id="invite-username" placeholder="usuario_do_amigo">
+      </div>
+      <div id="invite-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancel-invite-btn">Cancelar</button>
+        <button class="btn btn-primary" id="confirm-invite-btn">Convidar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  const INVITE_URL = "{% url 'invite_to_community' community.id %}";
+
+  // Album modal
+  const albumModal = document.getElementById('new-album-modal');
+  function openAlbumModal() { albumModal.classList.add('open'); }
+  function closeAlbumModal() { albumModal.classList.remove('open'); }
+  document.getElementById('new-album-btn')?.addEventListener('click', openAlbumModal);
+  document.getElementById('new-album-card-btn')?.addEventListener('click', openAlbumModal);
+  document.getElementById('new-album-empty-btn')?.addEventListener('click', openAlbumModal);
+  document.getElementById('cancel-album-btn')?.addEventListener('click', closeAlbumModal);
+  albumModal.addEventListener('click', e => { if (e.target === albumModal) closeAlbumModal(); });
+
+  // Invite modal
+  const inviteModal = document.getElementById('invite-modal');
+  function openInviteModal() { inviteModal.classList.add('open'); }
+  function closeInviteModal() {
+    inviteModal.classList.remove('open');
+    document.getElementById('invite-username').value = '';
+    document.getElementById('invite-error').style.display = 'none';
+  }
+  document.getElementById('invite-btn')?.addEventListener('click', openInviteModal);
+  document.getElementById('cancel-invite-btn')?.addEventListener('click', closeInviteModal);
+  inviteModal.addEventListener('click', e => { if (e.target === inviteModal) closeInviteModal(); });
+
+  document.getElementById('confirm-invite-btn')?.addEventListener('click', async () => {
+    const username = document.getElementById('invite-username').value.trim();
+    const errEl = document.getElementById('invite-error');
+    if (!username) return;
+    const res = await fetch(INVITE_URL, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username=${encodeURIComponent(username)}`,
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeInviteModal();
+      location.reload();
+    } else {
+      errEl.textContent = data.error || 'Erro ao convidar';
+      errEl.style.display = 'block';
+    }
+  });
+
+  // Delete community
+  document.getElementById('delete-community-btn')?.addEventListener('click', () => {
+    if (confirm('Deletar "{{ community.name }}"? Todos os álbuns e fotos serão apagados.')) {
+      document.getElementById('delete-community-form').submit();
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeAlbumModal();
+      document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+    }
+  });
+</script>
+<script src="{% static 'landing/js/app.js' %}"></script>
+{% endblock %}

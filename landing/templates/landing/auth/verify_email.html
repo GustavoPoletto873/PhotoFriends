@@ -1,0 +1,36 @@
+{% extends 'landing/base.html' %}
+
+{% block title %}Photo Friends — Verificar e-mail{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">📧</div>
+      <div class="auth-logo-text">Verifique seu e-mail</div>
+      <div class="auth-logo-tag">Enviamos um código para <strong>{{ user.email }}</strong></div>
+    </div>
+
+    {% if error %}
+      <div class="auth-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">Código de 6 dígitos</label>
+        <input type="text" name="code" class="input input--code" placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric" autofocus required>
+      </div>
+      <button type="submit" class="btn btn-primary auth-submit">Verificar</button>
+    </form>
+
+    <div class="auth-resend">
+      Não recebeu? <a href="{% url 'resend_verification' %}">Reenviar código</a>
+    </div>
+
+    <p class="auth-hint">Usando email backend de console em dev — o código aparece no terminal do servidor.</p>
+  </div>
+</div>
+{% endblock %}

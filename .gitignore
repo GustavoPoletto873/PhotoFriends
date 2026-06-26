@@ -1,5 +1,35 @@
-node_modules/
+# Secrets — never commit these
 .env
-photo_friends.db
-*.db-shm
-*.db-wal
+*.env
+
+# Django
+__pycache__/
+*.py[cod]
+*.pyo
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Project-specific large files / old versions
+antigravity.google.zip
+temp_animation_files/
+.antigravitycli/
+photo-friends/

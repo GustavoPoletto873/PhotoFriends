@@ -1,0 +1,130 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — Álbuns{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<!-- App nav -->
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link active">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.profile.avatar_url %}
+      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+    {% else %}
+      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+    {% endif %}
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<!-- Page content -->
+<div class="app-content">
+  <div class="app-container">
+
+    <div class="albums-header">
+      <div>
+        <h1 class="albums-title">Seus <span class="albums-title-accent">álbuns</span></h1>
+        <p class="albums-subtitle">{{ albums|length }} álbum{% if albums|length != 1 %}ns{% endif %}</p>
+      </div>
+      <button class="btn btn-primary" id="new-album-btn">+ Novo álbum</button>
+    </div>
+
+    {% if albums %}
+      <div class="folders-grid">
+        {% for album in albums %}
+          <div class="folder-wrapper">
+            <div class="folder-tab" style="background:{{ album.tab_color }}"></div>
+            <a href="{% url 'album_detail' album.id %}" class="folder-card">
+              {% if album.cover_url %}
+                <img src="{{ album.cover_url }}" class="folder-cover" alt="{{ album.name }}" loading="lazy">
+              {% else %}
+                <div class="folder-cover-gradient" style="background:{{ album.gradient }}"></div>
+              {% endif %}
+              <div class="folder-info">
+                <div class="folder-name">{{ album.name }}</div>
+                <div class="folder-meta">
+                  {{ album.media.count }} {% if album.media.count == 1 %}item{% else %}itens{% endif %}
+                  · {{ album.created_by.get_full_name|default:album.created_by.username }}
+                </div>
+                <div class="folder-date">{{ album.created_at|date:"d M Y" }}</div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
+
+        <!-- New album card -->
+        <div class="folder-wrapper folder-wrapper--new">
+          <button class="folder-card folder-card--new" id="new-album-card-btn">
+            <div class="folder-new-icon">+</div>
+            <div class="folder-info">
+              <div class="folder-name">Novo álbum</div>
+              <div class="folder-meta">Criar álbum</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    {% else %}
+      <div class="albums-empty">
+        <div class="albums-empty-icon">📷</div>
+        <h3>Nenhum álbum ainda</h3>
+        <p>Crie seu primeiro álbum e chame os amigos!</p>
+        <button class="btn btn-primary" id="new-album-empty-btn">+ Criar álbum</button>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- New album modal -->
+<div class="modal-overlay" id="new-album-modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Novo álbum</h2>
+    <form method="post" action="{% url 'albums_list' %}">
+      {% csrf_token %}
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label">Nome do álbum</label>
+          <input type="text" name="name" class="input" placeholder="Ex: Rolê da Praia — Jun 2025" required autofocus>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição (opcional)</label>
+          <input type="text" name="description" class="input" placeholder="Uma breve descrição...">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="cancel-modal-btn">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Criar álbum</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'landing/js/app.js' %}"></script>
+<script>
+  const modal = document.getElementById('new-album-modal');
+  function openModal() { modal.classList.add('open'); }
+  function closeModal() { modal.classList.remove('open'); }
+
+  document.getElementById('new-album-btn')?.addEventListener('click', openModal);
+  document.getElementById('new-album-card-btn')?.addEventListener('click', openModal);
+  document.getElementById('new-album-empty-btn')?.addEventListener('click', openModal);
+  document.getElementById('cancel-modal-btn')?.addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+{% endblock %}

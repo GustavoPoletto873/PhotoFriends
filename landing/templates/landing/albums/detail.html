@@ -1,0 +1,175 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — {{ album.name }}{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link {% if not community %}active{% endif %}">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link {% if community %}active{% endif %}">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.profile.avatar_url %}
+      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+    {% else %}
+      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+    {% endif %}
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <!-- Header -->
+    <div class="album-detail-header">
+      {% if community %}
+        <a href="{% url 'community_detail' community.id %}" class="album-back">← {{ community.name }}</a>
+      {% else %}
+        <a href="{% url 'albums_list' %}" class="album-back">← Álbuns pessoais</a>
+      {% endif %}
+
+      <div class="album-detail-title-row">
+        <div>
+          <h1 class="album-detail-title">{{ album.name }}</h1>
+          {% if album.description %}
+            <p class="album-detail-desc">{{ album.description }}</p>
+          {% endif %}
+          <div class="album-members-row">
+            {% for m in members %}
+              <span class="member-badge">
+                {% if m.profile.avatar_url %}
+                  <img src="{{ m.profile.avatar_url }}" class="member-avatar" alt="{{ m.get_full_name }}">
+                {% else %}
+                  <span class="member-avatar member-avatar--text">{{ m.first_name|first|upper }}</span>
+                {% endif %}
+                {{ m.first_name }}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="album-detail-actions">
+          {% if not community %}
+            <button class="btn btn-ghost btn-sm" id="invite-btn">+ Convidar</button>
+          {% endif %}
+          {% if is_owner %}
+            <form method="post" action="{% url 'delete_album' album.id %}" id="delete-album-form" style="display:inline">
+              {% csrf_token %}
+              <button type="button" class="btn btn-danger btn-sm" id="delete-album-btn">Deletar</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload zone — compact -->
+    <div class="upload-zone upload-zone--compact" id="upload-zone">
+      <input type="file" class="upload-input" id="upload-input"
+             multiple accept="image/*,video/*"
+             data-album-id="{{ album.id }}"
+             data-upload-url="{% url 'upload_media' album.id %}">
+      <div class="upload-icon">📎</div>
+      <div class="upload-text">
+        <div class="upload-title">Arraste arquivos aqui ou clique para selecionar</div>
+        <div class="upload-subtitle">JPG · PNG · GIF · MP4 · MOV · máx 100MB</div>
+      </div>
+      <div class="upload-progress" id="upload-progress">
+        <div class="upload-progress-bar" id="upload-progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- Media grouped by date -->
+    <div class="media-count-label">{{ total_media }} {% if total_media == 1 %}item{% else %}itens{% endif %}</div>
+
+    {% if media_by_date %}
+      <div id="media-container">
+        {% for date, items in media_by_date %}
+          <div class="media-date-section">
+            <div class="media-date-label">{{ date|date:"l, d \d\e F \d\e Y" }}</div>
+            <div class="photo-grid">
+              {% for m in items %}
+                <div class="photo-item"
+                     data-index="{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}"
+                     data-url="{{ m.cloudinary_url }}"
+                     data-type="{{ m.media_type }}"
+                     data-uploader="{{ m.uploaded_by.get_full_name|default:m.uploaded_by.username }}"
+                     data-date="{{ m.display_date|date:'d/m/Y H:i' }}"
+                     data-id="{{ m.id }}"
+                     data-mine="{% if m.uploaded_by == user %}1{% else %}0{% endif %}">
+                  {% if m.media_type == 'video' %}
+                    <video src="{{ m.cloudinary_url }}" preload="metadata" muted></video>
+                    <div class="photo-item-video-badge">▶</div>
+                  {% else %}
+                    <img src="{{ m.cloudinary_url }}" alt="{{ m.filename }}" loading="lazy">
+                  {% endif %}
+                  <div class="photo-item-overlay">
+                    <span class="photo-item-uploader">{{ m.uploaded_by.first_name }}</span>
+                    {% if m.uploaded_by == user %}
+                      <form method="post" action="{% url 'delete_media' m.id %}" class="delete-media-form">
+                        {% csrf_token %}
+                        <button type="button" class="photo-item-delete" data-media-id="{{ m.id }}">✕</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="media-empty">Nenhuma foto ainda. Seja o primeiro a enviar! 🎉</p>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- Invite modal -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Convidar amigo</h2>
+    <div class="modal-form">
+      <div class="form-group">
+        <label class="form-label">Username do amigo</label>
+        <input type="text" class="input" id="invite-username" placeholder="usuario_do_amigo">
+      </div>
+      <div id="invite-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancel-invite-btn">Cancelar</button>
+        <button class="btn btn-primary" id="confirm-invite-btn">Convidar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <a class="lightbox-download" id="lb-download" href="#" target="_blank" title="Baixar">⬇</a>
+  <button class="lightbox-close" id="lb-close">✕</button>
+  <button class="lightbox-nav lightbox-prev" id="lb-prev">&#8249;</button>
+  <button class="lightbox-nav lightbox-next" id="lb-next">&#8250;</button>
+  <img class="lightbox-media" id="lb-img" src="" alt="" style="display:none">
+  <video class="lightbox-media" id="lb-video" controls style="display:none"></video>
+  <div class="lightbox-info" id="lb-info"></div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  const INVITE_URL = "{% url 'invite_member' album.id %}";
+  const DELETE_ALBUM_FORM = document.getElementById('delete-album-form');
+</script>
+<script src="{% static 'landing/js/app.js' %}"></script>
+{% endblock %}

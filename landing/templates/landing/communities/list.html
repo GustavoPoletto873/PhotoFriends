@@ -1,0 +1,128 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+
+{% block title %}Photo Friends — Comunidades{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link active">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.profile.avatar_url %}
+      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+    {% else %}
+      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+    {% endif %}
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <div class="albums-header">
+      <div>
+        <h1 class="albums-title">Suas <span class="albums-title-accent">comunidades</span></h1>
+        <p class="albums-subtitle">{{ communities|length }} comunidade{% if communities|length != 1 %}s{% endif %}</p>
+      </div>
+      <button class="btn btn-primary" id="new-community-btn">+ Nova comunidade</button>
+    </div>
+
+    {% if communities %}
+      <div class="folders-grid">
+        {% for community in communities %}
+          <div class="folder-wrapper">
+            <div class="folder-tab" style="background:{{ community.tab_color }}"></div>
+            <a href="{% url 'community_detail' community.id %}" class="folder-card">
+              {% if community.cover_url %}
+                <img src="{{ community.cover_url }}" class="folder-cover" alt="{{ community.name }}" loading="lazy">
+              {% else %}
+                <div class="folder-cover-gradient" style="background:{{ community.gradient }}"></div>
+              {% endif %}
+              <div class="folder-info">
+                <div class="folder-name">{{ community.name }}</div>
+                <div class="folder-meta">
+                  👥 {{ community.memberships.count }} membro{% if community.memberships.count != 1 %}s{% endif %}
+                  · 📁 {{ community.albums.count }} álbum{% if community.albums.count != 1 %}ns{% endif %}
+                </div>
+                <div class="folder-date">{{ community.created_at|date:"d M Y" }}</div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
+
+        <!-- New community card -->
+        <div class="folder-wrapper folder-wrapper--new">
+          <button class="folder-card folder-card--new" id="new-community-card-btn">
+            <div class="folder-new-icon">+</div>
+            <div class="folder-info">
+              <div class="folder-name">Nova comunidade</div>
+              <div class="folder-meta">Criar grupo</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+    {% else %}
+      <div class="albums-empty">
+        <div class="albums-empty-icon">👥</div>
+        <h3>Nenhuma comunidade ainda</h3>
+        <p>Crie uma comunidade e convide seus amigos para compartilhar fotos!</p>
+        <button class="btn btn-primary" id="new-community-empty-btn">+ Criar comunidade</button>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- New community modal -->
+<div class="modal-overlay" id="new-community-modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Nova comunidade</h2>
+    <form method="post" action="{% url 'communities_list' %}">
+      {% csrf_token %}
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label">Nome da comunidade</label>
+          <input type="text" name="name" class="input" placeholder="Ex: Família Poletto · Turma da Facul" required autofocus>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição (opcional)</label>
+          <input type="text" name="description" class="input" placeholder="Para que serve esse grupo?">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="cancel-community-modal-btn">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Criar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const modal = document.getElementById('new-community-modal');
+  function openModal() { modal.classList.add('open'); }
+  function closeModal() { modal.classList.remove('open'); }
+
+  document.getElementById('new-community-btn')?.addEventListener('click', openModal);
+  document.getElementById('new-community-card-btn')?.addEventListener('click', openModal);
+  document.getElementById('new-community-empty-btn')?.addEventListener('click', openModal);
+  document.getElementById('cancel-community-modal-btn')?.addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+{% endblock %}
