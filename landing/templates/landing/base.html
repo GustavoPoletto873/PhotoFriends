@@ -16,16 +16,17 @@
 
   {% block body %}{% endblock %}
 
-  {% if user.is_authenticated %}
-  <span class="fab-sair-wrap">
-    <a href="{% url 'logout' %}" class="fab-sair" title="Sair">
-      <span class="fab-sair-icon">🚪</span>
-      <span class="fab-sair-label">SAIR</span>
-    </a>
-  </span>
-  {% endif %}
-
   <script src="{% static 'landing/js/script.js' %}?v={% now 'U' %}"></script>
   {% block extra_js %}{% endblock %}
+  <script>
+    // Aplica glow animado no botão Sair do nav
+    document.querySelectorAll('a[href*="logout"]').forEach(el => {
+      if (!el.closest('nav')) return;
+      const wrap = document.createElement('span');
+      wrap.className = 'nav-sair-glow-wrap';
+      el.parentNode.insertBefore(wrap, el);
+      wrap.appendChild(el);
+    });
+  </script>
 </body>
 </html>
