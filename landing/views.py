@@ -386,6 +386,9 @@ def delete_media_view(request, media_id):
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 
 def _send_verification_email(user, code):
+    # Fallback: always log the code so it's visible in Render logs if email fails
+    logger.info('VERIFY CODE for %s: %s', user.email, code)
+
     first_name = user.first_name or user.username
     subject = 'Photo Friends — Verifique seu e-mail'
     text = (
@@ -406,6 +409,7 @@ def _send_verification_email(user, code):
     msg.attach_alternative(html, 'text/html')
     try:
         msg.send(fail_silently=False)
+        logger.info('SMTP verification email sent OK to %s', user.email)
     except Exception as e:
         logger.error('SMTP verification email failed for %s: %s', user.email, e)
 
