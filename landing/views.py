@@ -1,7 +1,10 @@
 import io
 import json
+import logging
 from collections import defaultdict
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 import cloudinary.uploader
 from django.contrib.auth import authenticate, login, logout
@@ -401,7 +404,10 @@ def _send_verification_email(user, code):
         to=[user.email],
     )
     msg.attach_alternative(html, 'text/html')
-    msg.send(fail_silently=True)
+    try:
+        msg.send(fail_silently=False)
+    except Exception as e:
+        logger.error('SMTP verification email failed for %s: %s', user.email, e)
 
 
 def _send_reset_email(user, code):
@@ -423,7 +429,10 @@ def _send_reset_email(user, code):
         to=[user.email],
     )
     msg.attach_alternative(html, 'text/html')
-    msg.send(fail_silently=True)
+    try:
+        msg.send(fail_silently=False)
+    except Exception as e:
+        logger.error('SMTP reset email failed for %s: %s', user.email, e)
 
 
 @login_required

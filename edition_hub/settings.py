@@ -107,6 +107,14 @@ else:
 # Token de redefinição de senha expira em 24h
 PASSWORD_RESET_TIMEOUT = 86400
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'loggers': {'landing': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False}},
+}
+
 # SMTP timeout — evita bloquear o worker do Render indefinidamente
 EMAIL_TIMEOUT = 10
 
