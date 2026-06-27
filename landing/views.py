@@ -68,15 +68,11 @@ def register_view(request):
                 except Exception:
                     pass
 
-            # Email verification
-            code = profile.generate_code('verification')
-            profile.verification_sent_at = timezone.now()
+            profile.email_verified = True
             profile.save()
 
-            _send_verification_email(user, code)
-
-            request.session['verify_user_id'] = user.id
-            return redirect('verify_email')
+            login(request, user)
+            return redirect('albums_list')
         else:
             error = next(iter(form.errors.values()))[0]
 
@@ -134,17 +130,6 @@ def login_view(request):
         password = request.POST.get('password', '')
         user = authenticate(request, username=username, password=password)
         if user:
-            if not hasattr(user, 'profile') or not user.profile.email_verified:
-                try:
-                    profile = user.profile
-                except UserProfile.DoesNotExist:
-                    profile = UserProfile.objects.create(user=user)
-                code = profile.generate_code('verification')
-                profile.verification_sent_at = timezone.now()
-                profile.save()
-                _send_verification_email(user, code)
-                request.session['verify_user_id'] = user.id
-                return redirect('verify_email')
             login(request, user)
             return redirect('albums_list')
         else:
