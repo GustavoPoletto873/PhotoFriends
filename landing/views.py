@@ -47,7 +47,6 @@ def register_view(request):
             d = form.cleaned_data
             user = User.objects.create_user(
                 username=d['username'],
-                email=d['email'],
                 password=d['password'],
                 first_name=d['first_name'],
                 last_name=d['last_name'],

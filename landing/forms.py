@@ -7,7 +7,6 @@ class RegisterForm(forms.Form):
     first_name = forms.CharField(max_length=100, label='Nome')
     last_name = forms.CharField(max_length=100, label='Sobrenome')
     username = forms.CharField(max_length=150, label='Usuário')
-    email = forms.EmailField(label='E-mail')
     password = forms.CharField(widget=forms.PasswordInput, label='Senha', min_length=6)
     password_confirm = forms.CharField(widget=forms.PasswordInput, label='Confirmar senha')
     avatar = forms.ImageField(required=False, label='Foto de perfil')
@@ -17,12 +16,6 @@ class RegisterForm(forms.Form):
         if User.objects.filter(username=u).exists():
             raise ValidationError('Username já em uso.')
         return u
-
-    def clean_email(self):
-        e = self.cleaned_data['email']
-        if User.objects.filter(email=e).exists():
-            raise ValidationError('Este e-mail já está cadastrado.')
-        return e
 
     def clean(self):
         c = super().clean()
