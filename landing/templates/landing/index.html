@@ -12,7 +12,6 @@
     </div>
     <ul class="nav-links">
       <li><a href="#" class="nav-link">Sobre</a></li>
-      <li><a href="{% url 'albums_list' %}" class="nav-link">Álbuns</a></li>
       <li><a href="#" class="nav-link">Como funciona</a></li>
       {% if user.is_authenticated %}
         <li><a href="{% url 'albums_list' %}" class="nav-link nav-link--cta">Meus álbuns</a></li>

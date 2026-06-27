@@ -1,0 +1,457 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Photo Friends — Meu Perfil{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Abas internas do perfil */
+  .profile-tab-pane { display: flex; flex-direction: column; gap: 1rem; }
+  .profile-tab-pane.hidden { display: none !important; }
+
+  /* Painel de edição (oculto por padrão, aparece ao clicar no avatar) */
+  .profile-edit-panel {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 1.25rem;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+  .profile-edit-panel.open { display: block; }
+
+  .profile-tab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.1); border-radius: 99px;
+    font-size: 0.68rem; font-weight: 800; padding: 0.1rem 0.45rem; min-width: 1.2rem;
+  }
+  .profile-tab-count--alert { background: rgba(244,63,142,0.25); color: #f43f8e; }
+
+  /* Avatar clicável no nav */
+  .nav-avatar-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0; }
+  .nav-avatar-btn .app-nav-name { font-family: inherit; }
+
+  /* Grid de amigos (cards) */
+  .friends-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .friend-card {
+    display: flex; gap: 1rem; align-items: flex-start;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 1.25rem; padding: 1.1rem 1.25rem;
+    text-decoration: none; color: inherit;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .friend-card:hover { background: rgba(255,255,255,0.08); border-color: rgba(244,63,142,0.3); }
+  .friend-card-avatar { flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,0.1); }
+  .friend-card-avatar img,
+  .friend-card-avatar video { width: 100%; height: 100%; object-fit: cover; }
+  .friend-card-avatar-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 800; background: var(--app-grad); color: #fff; }
+  .friend-card-info { flex: 1; min-width: 0; }
+  .friend-card-name { font-weight: 700; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .friend-card-username { font-size: 0.72rem; color: var(--text-subtle); margin-top: 0.1rem; }
+  .friend-card-bio { font-size: 0.78rem; color: var(--text-subtle); margin-top: 0.35rem; line-height: 1.4; }
+  .friend-card-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .friend-card-count { font-size: 0.72rem; color: var(--text-subtle); }
+
+  /* Pasta Favoritos */
+  .fav-pasta-wrapper { position: relative; }
+  .fav-pasta-tab {
+    position: absolute; top: -8px; left: 1.25rem;
+    width: 2.5rem; height: 10px; border-radius: 6px 6px 0 0;
+    background: linear-gradient(135deg,#f43f8e,#facc15);
+  }
+  .fav-pasta-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 1.25rem;
+    overflow: hidden;
+  }
+  .fav-pasta-header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .fav-pasta-icon { font-size: 1.75rem; }
+  .fav-pasta-title { font-size: 1.05rem; font-weight: 800; }
+  .fav-pasta-count { font-size: 0.72rem; color: var(--text-subtle); margin-top: 0.1rem; }
+  .fav-date-section { padding: 1rem 1.5rem; }
+  .fav-date-label {
+    font-size: 0.72rem; font-weight: 700; color: var(--text-subtle);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 0.6rem;
+  }
+  .fav-photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 0.4rem;
+  }
+  .fav-photo-item {
+    position: relative; aspect-ratio: 1;
+    border-radius: 0.6rem; overflow: hidden;
+    background: rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .fav-photo-item img,
+  .fav-photo-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fav-video-badge {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    font-size: 1rem; opacity: 0.9;
+    pointer-events: none;
+  }
+  .fav-photo-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0);
+    display: flex; flex-direction: column;
+    justify-content: flex-end;
+    padding: 0.35rem;
+    transition: background 0.18s;
+  }
+  .fav-photo-item:hover .fav-photo-overlay { background: rgba(0,0,0,0.5); }
+  .fav-photo-album {
+    font-size: 0.6rem; font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    opacity: 0; transition: opacity 0.18s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fav-photo-item:hover .fav-photo-album { opacity: 1; }
+  .fav-folder-remove {
+    position: absolute; top: 0.3rem; right: 0.3rem;
+    width: 1.4rem; height: 1.4rem;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%; color: #facc15;
+    font-size: 0.65rem; cursor: pointer;
+    opacity: 0; transition: opacity 0.18s, background 0.15s;
+  }
+  .fav-photo-item:hover .fav-folder-remove { opacity: 1; }
+  .fav-folder-remove:hover { background: rgba(244,63,142,0.65); color: #fff; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+    <a href="#amigos" class="app-nav-link profile-tab-link active" data-tab="amigos">
+      Amigos{% if pending_requests %} <span class="profile-tab-count profile-tab-count--alert">{{ pending_requests.count }}</span>{% elif friends_count %} <span class="profile-tab-count">{{ friends_count }}</span>{% endif %}
+    </a>
+    <a href="#favoritos" class="app-nav-link profile-tab-link" data-tab="favoritos">
+      Favoritos{% if user_favorites.count %} <span class="profile-tab-count">{{ user_favorites.count }}</span>{% endif %}
+    </a>
+  </div>
+
+  <div class="app-nav-right">
+    <!-- Botão adicionar amigo -->
+    <button class="btn btn-primary btn-sm" id="nav-add-friend-btn">+ Adicionar amigo</button>
+
+    <!-- Avatar/nome → abre edição de perfil -->
+    <button class="nav-avatar-btn" id="toggle-edit-btn" title="Editar perfil">
+      {% if user.profile.avatar_url %}
+        {% if user.profile.avatar_type == 'video' %}
+          <video src="{{ user.profile.avatar_url }}" class="app-nav-avatar" autoplay loop muted playsinline></video>
+        {% else %}
+          <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+        {% endif %}
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+      <span class="app-nav-name">{{ user.first_name }}</span>
+    </button>
+
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container" style="max-width:680px">
+
+    <!-- PAINEL: Editar perfil (aparece ao clicar no avatar) -->
+    <div class="profile-edit-panel" id="edit-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+        <h2 class="section-title" style="margin:0">Editar perfil</h2>
+        <button id="close-edit-btn" class="btn btn-ghost btn-sm">✕ Fechar</button>
+      </div>
+
+      {% if error %}<div class="auth-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+      {% if success %}<div class="auth-success" style="margin-bottom:1rem">{{ success }}</div>{% endif %}
+
+      <form method="post" enctype="multipart/form-data" class="auth-form">
+        {% csrf_token %}
+
+        <div class="avatar-upload-row" style="margin-bottom:1.5rem;gap:1.25rem">
+          <div class="avatar-preview avatar-preview--lg" id="avatar-preview">
+            {% if profile.avatar_url %}
+              {% if profile.avatar_type == 'video' %}
+                <video src="{{ profile.avatar_url }}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;border-radius:50%"></video>
+              {% else %}
+                <img src="{{ profile.avatar_url }}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">
+              {% endif %}
+            {% else %}
+              <span class="avatar-placeholder-icon" style="font-size:2rem">👤</span>
+            {% endif %}
+          </div>
+          <div>
+            <label for="id_avatar" class="btn btn-ghost btn-sm" style="cursor:pointer">📷 Trocar foto / vídeo / gif</label>
+            <input type="file" id="id_avatar" name="avatar" accept="image/*,video/*" style="display:none">
+            <p style="font-size:0.72rem;color:var(--text-subtle);margin-top:0.3rem">JPG · PNG · GIF · MP4</p>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome</label>
+            <input type="text" name="first_name" class="input" value="{{ user.first_name }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sobrenome</label>
+            <input type="text" name="last_name" class="input" value="{{ user.last_name }}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Usuário</label>
+          <input type="text" name="username" class="input" value="{{ user.username }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Biografia</label>
+          <textarea name="bio" class="input" rows="3" placeholder="Conte algo sobre você...">{{ profile.bio }}</textarea>
+        </div>
+        <div style="margin-top:0.25rem"><span class="profile-role-badge role-{{ profile.role }}">{{ profile.get_role_display }}</span></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem">Salvar alterações</button>
+      </form>
+    </div>
+
+    <!-- TAB: Amigos -->
+    <div class="profile-tab-pane" id="tab-amigos">
+
+      {% if pending_requests %}
+      <div class="profile-card" style="border-color:rgba(244,63,142,0.3)">
+        <h3 class="section-title" style="color:var(--app-pink);margin-bottom:0.75rem">Pedidos recebidos</h3>
+        {% for req in pending_requests %}
+        <div class="friend-request-row" id="freq-{{ req.id }}">
+          {% if req.from_user.profile.avatar_url %}
+            <img src="{{ req.from_user.profile.avatar_url }}" class="member-avatar" alt="">
+          {% else %}
+            <span class="member-avatar member-avatar--text">{{ req.from_user.first_name|first|upper }}</span>
+          {% endif %}
+          <span style="flex:1;font-weight:600;font-size:0.9rem">{{ req.from_user.get_full_name|default:req.from_user.username }}</span>
+          <button class="btn btn-primary btn-sm friend-respond-btn" data-id="{{ req.id }}" data-action="accept">Aceitar</button>
+          <button class="btn btn-ghost btn-sm friend-respond-btn" data-id="{{ req.id }}" data-action="reject">Recusar</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if friends %}
+        <div class="friends-grid">
+          {% for friend in friends %}
+          <a href="{% url 'profile' friend.username %}" class="friend-card">
+            <div class="friend-card-avatar">
+              {% if friend.profile.avatar_url %}
+                {% if friend.profile.avatar_type == 'video' %}
+                  <video src="{{ friend.profile.avatar_url }}" autoplay loop muted playsinline></video>
+                {% else %}
+                  <img src="{{ friend.profile.avatar_url }}" alt="{{ friend.first_name }}">
+                {% endif %}
+              {% else %}
+                <div class="friend-card-avatar-placeholder">{{ friend.first_name|first|upper }}</div>
+              {% endif %}
+            </div>
+            <div class="friend-card-info">
+              <div class="friend-card-name">{{ friend.get_full_name|default:friend.username }}</div>
+              <div class="friend-card-username">@{{ friend.username }}</div>
+              {% if friend.profile.bio %}
+                <div class="friend-card-bio">{{ friend.profile.bio|truncatechars:60 }}</div>
+              {% endif %}
+              <div class="friend-card-meta">
+                <span class="friend-card-count">👥 {{ friend.friend_count }} amigo{% if friend.friend_count != 1 %}s{% endif %}</span>
+                <span class="profile-role-badge role-{{ friend.profile.role }}">{{ friend.profile.get_role_display }}</span>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="profile-card">
+          <div class="empty-state">
+            <div style="font-size:2rem">👥</div>
+            <p style="color:var(--text-subtle);margin-top:0.4rem;font-size:0.85rem">Nenhum amigo ainda.</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- TAB: Favoritos -->
+    <div class="profile-tab-pane hidden" id="tab-favoritos">
+      {% if favorites_by_date %}
+        <!-- Pasta Favoritos -->
+        <div class="fav-pasta-wrapper">
+          <div class="fav-pasta-tab"></div>
+          <div class="fav-pasta-card">
+            <div class="fav-pasta-header">
+              <span class="fav-pasta-icon">⭐</span>
+              <div>
+                <div class="fav-pasta-title">Favoritos</div>
+                <div class="fav-pasta-count">{{ user_favorites|length }} item{% if user_favorites|length != 1 %}s{% endif %}</div>
+              </div>
+            </div>
+
+            {% for date, items in favorites_by_date %}
+            <div class="fav-date-section">
+              <div class="fav-date-label">{{ date|date:"l, d \d\e F \d\e Y" }}</div>
+              <div class="fav-photo-grid">
+                {% for fav in items %}
+                <div class="fav-photo-item" id="fav-tile-{{ fav.media.id }}">
+                  {% if fav.media.media_type == 'video' %}
+                    <video src="{{ fav.media.cloudinary_url }}" muted preload="metadata"></video>
+                    <div class="fav-video-badge">▶</div>
+                  {% else %}
+                    <img src="{{ fav.media.cloudinary_url }}" alt="" loading="lazy">
+                  {% endif %}
+                  <div class="fav-photo-overlay">
+                    <button class="fav-folder-remove" data-media-id="{{ fav.media.id }}" title="Remover">★</button>
+                    <span class="fav-photo-album">{{ fav.media.album.name }}</span>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+
+          </div>
+        </div>
+      {% else %}
+        <div class="profile-card">
+          <div class="empty-state">
+            <div style="font-size:2rem">⭐</div>
+            <p style="color:var(--text-subtle);margin-top:0.4rem;font-size:0.85rem">Nenhum favorito ainda.</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- PAINEL: Adicionar amigo (oculto) -->
+    <div class="profile-tab-pane hidden" id="tab-adicionar-amigo">
+      <div class="profile-card">
+        <h2 class="section-title" style="margin-bottom:1rem">Adicionar amigo</h2>
+        <div style="display:flex;gap:0.75rem">
+          <input type="text" class="input" id="add-friend-input" placeholder="@username" style="flex:1">
+          <button class="btn btn-primary" id="add-friend-btn">Enviar pedido</button>
+        </div>
+        <div id="add-friend-msg" style="margin-top:0.75rem;font-size:0.85rem"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+// ── Abas Amigos / Favoritos ──
+const tabLinks = document.querySelectorAll('.profile-tab-link');
+const tabPanes = document.querySelectorAll('.profile-tab-pane');
+
+function switchTab(name) {
+  tabLinks.forEach(a => a.classList.toggle('active', a.dataset.tab === name));
+  tabPanes.forEach(p => p.classList.toggle('hidden', p.id !== `tab-${name}`));
+  history.replaceState(null, '', `#${name}`);
+}
+
+tabLinks.forEach(a => a.addEventListener('click', e => {
+  e.preventDefault();
+  switchTab(a.dataset.tab);
+}));
+
+const hash = location.hash.replace('#', '');
+if (hash && document.getElementById(`tab-${hash}`)) switchTab(hash);
+
+// ── Editar perfil (toggle ao clicar no avatar) ──
+const editPanel = document.getElementById('edit-panel');
+
+function openEditPanel() {
+  editPanel.classList.add('open');
+  tabPanes.forEach(p => p.classList.add('hidden'));
+  editPanel.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function closeEditPanel() {
+  editPanel.classList.remove('open');
+  const active = document.querySelector('.profile-tab-link.active');
+  const activeTab = active ? active.dataset.tab : 'amigos';
+  tabPanes.forEach(p => p.classList.toggle('hidden', p.id !== `tab-${activeTab}`));
+}
+
+document.getElementById('toggle-edit-btn').addEventListener('click', () => {
+  editPanel.classList.contains('open') ? closeEditPanel() : openEditPanel();
+});
+
+document.getElementById('close-edit-btn').addEventListener('click', closeEditPanel);
+
+// Abre o painel se voltou do POST com erro ou sucesso
+{% if error or success %}openEditPanel();{% endif %}
+
+// ── Botão + Adicionar amigo ──
+document.getElementById('nav-add-friend-btn').addEventListener('click', () => {
+  switchTab('adicionar-amigo');
+  document.getElementById('add-friend-input').focus();
+});
+
+// ── Avatar preview ──
+document.getElementById('id_avatar').addEventListener('change', function() {
+  const file = this.files[0]; if (!file) return;
+  const p = document.getElementById('avatar-preview');
+  if (file.type.startsWith('video/')) {
+    p.innerHTML = `<video src="${URL.createObjectURL(file)}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;border-radius:50%"></video>`;
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => { p.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`; };
+    reader.readAsDataURL(file);
+  }
+});
+
+// ── Add friend ──
+document.getElementById('add-friend-btn').addEventListener('click', async () => {
+  const input = document.getElementById('add-friend-input');
+  const username = input.value.trim().replace(/^@/, '');
+  const msg = document.getElementById('add-friend-msg');
+  if (!username) return;
+  const res = await fetch(`/friends/request/${username}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}});
+  const data = await res.json();
+  msg.textContent = res.ok ? '✓ Pedido enviado!' : (data.error || 'Erro');
+  msg.style.color = res.ok ? '#43e97b' : '#f43f5e';
+  if (res.ok) input.value = '';
+});
+document.getElementById('add-friend-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('add-friend-btn').click();
+});
+
+// ── Friend respond ──
+document.querySelectorAll('.friend-respond-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const {id, action} = btn.dataset;
+    await fetch(`/friends/respond/${id}/${action}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}});
+    document.getElementById(`freq-${id}`)?.remove();
+  });
+});
+
+// ── Unfavorite (pasta style) ──
+document.querySelectorAll('.fav-folder-remove').forEach(btn => {
+  btn.addEventListener('click', async e => {
+    e.preventDefault(); e.stopPropagation();
+    const mediaId = btn.dataset.mediaId;
+    const res = await fetch(`/media/${mediaId}/favorite/`, {method:'POST', headers:{'X-CSRFToken':CSRF}});
+    if (res.ok) document.getElementById(`fav-tile-${mediaId}`)?.remove();
+  });
+});
+</script>
+{% endblock %}

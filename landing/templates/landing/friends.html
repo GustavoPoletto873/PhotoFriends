@@ -1,0 +1,130 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Photo Friends — Amigos{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'friends' %}" class="app-nav-link active">Amigos</a>
+  </div>
+  <div class="app-nav-right">
+    <a href="{% url 'edit_profile' %}">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+    </a>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container" style="max-width:700px">
+
+    <div style="display:flex;flex-direction:column;gap:1.5rem;padding-top:1rem">
+
+    <!-- Add friend -->
+    <div class="profile-card">
+      <h2 class="section-title">Adicionar amigo</h2>
+      <div style="display:flex;gap:0.75rem">
+        <input type="text" class="input" id="add-friend-input" placeholder="usuário do amigo" style="flex:1">
+        <button class="btn btn-primary" id="add-friend-btn">Enviar pedido</button>
+      </div>
+      <div id="add-friend-msg" style="margin-top:0.5rem;font-size:0.85rem"></div>
+    </div>
+
+    <!-- Pending received -->
+    {% if pending_received %}
+    <div class="profile-card">
+      <h2 class="section-title">Pedidos recebidos ({{ pending_received.count }})</h2>
+      {% for req in pending_received %}
+      <div class="friend-request-row" id="freq-{{ req.id }}">
+        <a href="{% url 'profile' req.from_user.username %}">
+          {% if req.from_user.profile.avatar_url %}
+            <img src="{{ req.from_user.profile.avatar_url }}" class="member-avatar" alt="">
+          {% else %}
+            <span class="member-avatar member-avatar--text">{{ req.from_user.first_name|first|upper }}</span>
+          {% endif %}
+        </a>
+        <span style="flex:1"><a href="{% url 'profile' req.from_user.username %}" style="color:var(--text-main)">{{ req.from_user.get_full_name|default:req.from_user.username }}</a></span>
+        <button class="btn btn-primary btn-sm friend-respond-btn" data-id="{{ req.id }}" data-action="accept">Aceitar</button>
+        <button class="btn btn-ghost btn-sm friend-respond-btn" data-id="{{ req.id }}" data-action="reject">Recusar</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Pending sent -->
+    {% if pending_sent %}
+    <div class="profile-card">
+      <h2 class="section-title">Pedidos enviados</h2>
+      {% for req in pending_sent %}
+      <div class="friend-request-row">
+        {% if req.to_user.profile.avatar_url %}
+          <img src="{{ req.to_user.profile.avatar_url }}" class="member-avatar" alt="">
+        {% else %}
+          <span class="member-avatar member-avatar--text">{{ req.to_user.first_name|first|upper }}</span>
+        {% endif %}
+        <span style="flex:1">{{ req.to_user.get_full_name|default:req.to_user.username }}</span>
+        <span style="color:var(--text-subtle);font-size:0.8rem">Pendente</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Friends list -->
+    <div class="profile-card">
+      <h2 class="section-title">Amigos ({{ friends.count }})</h2>
+
+      {% for friend in friends %}
+      <a href="{% url 'profile' friend.username %}" class="friend-request-row" style="text-decoration:none;color:inherit">
+        {% if friend.profile.avatar_url %}
+          <img src="{{ friend.profile.avatar_url }}" class="member-avatar" alt="">
+        {% else %}
+          <span class="member-avatar member-avatar--text">{{ friend.first_name|first|upper }}</span>
+        {% endif %}
+        <span style="flex:1">{{ friend.get_full_name|default:friend.username }}</span>
+        <span style="color:var(--text-subtle);font-size:0.8rem">@{{ friend.username }}</span>
+      </a>
+      {% empty %}
+        <p style="color:var(--text-subtle);font-size:0.85rem">Nenhum amigo ainda. Envie um pedido acima!</p>
+      {% endfor %}
+    </div>
+
+    </div><!-- /gap wrapper -->
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+document.getElementById('add-friend-btn').addEventListener('click', async () => {
+  const username = document.getElementById('add-friend-input').value.trim();
+  const msg = document.getElementById('add-friend-msg');
+  if (!username) return;
+  const res = await fetch(`/friends/request/${username}/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+  const data = await res.json();
+  msg.textContent = res.ok ? 'Pedido enviado!' : (data.error || 'Erro');
+  msg.style.color = res.ok ? 'var(--color-primary)' : '#f43f5e';
+});
+
+document.querySelectorAll('.friend-respond-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id, action = btn.dataset.action;
+    const res = await fetch(`/friends/respond/${id}/${action}/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+    if (res.ok) document.getElementById(`freq-${id}`)?.remove();
+  });
+});
+</script>
+{% endblock %}

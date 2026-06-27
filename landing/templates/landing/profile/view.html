@@ -1,0 +1,98 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Photo Friends — {{ target_user.get_full_name|default:target_user.username }}{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'friends' %}" class="app-nav-link">Amigos</a>
+  </div>
+  <div class="app-nav-right">
+    {% if user.is_authenticated %}
+      <a href="{% url 'edit_profile' %}" class="btn btn-ghost btn-sm">Meu perfil</a>
+    {% endif %}
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container" style="max-width:700px">
+
+    <div class="profile-card" style="text-align:center;padding:2rem">
+
+      <div style="display:flex;justify-content:center;margin-bottom:1.2rem">
+        {% if profile.avatar_url %}
+          {% if profile.avatar_type == 'video' %}
+            <video src="{{ profile.avatar_url }}" autoplay loop muted playsinline class="profile-avatar-lg"></video>
+          {% else %}
+            <img src="{{ profile.avatar_url }}" class="profile-avatar-lg" alt="">
+          {% endif %}
+        {% else %}
+          <div class="profile-avatar-lg profile-avatar-lg--placeholder">{{ target_user.first_name|first|upper }}</div>
+        {% endif %}
+      </div>
+
+      <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:0.25rem">{{ target_user.get_full_name|default:target_user.username }}</h1>
+      <p style="color:var(--text-subtle);margin-bottom:0.5rem">@{{ target_user.username }}</p>
+      <div class="profile-role-badge role-{{ profile.role }}" style="display:inline-block;margin-bottom:1rem">{{ profile.get_role_display }}</div>
+
+      {% if profile.bio %}
+        <p style="color:var(--text-main);max-width:480px;margin:0 auto 1.5rem;line-height:1.6">{{ profile.bio }}</p>
+      {% endif %}
+
+      {% if user.is_authenticated and user != target_user %}
+        {% if friendship_status == 'none' %}
+          <button class="btn btn-primary" id="add-friend-btn" data-username="{{ target_user.username }}">+ Adicionar amigo</button>
+        {% elif friendship_status == 'pending' %}
+          <button class="btn btn-ghost" disabled>Solicitação enviada</button>
+        {% elif friendship_status == 'accepted' or friendship_status == 'received_accepted' %}
+          <button class="btn btn-ghost" disabled>✓ Amigos</button>
+        {% elif friendship_status == 'received_pending' %}
+          <span style="color:var(--text-subtle);font-size:0.88rem">Enviou solicitação para você — responda em <a href="{% url 'edit_profile' %}">Meu Perfil</a></span>
+        {% endif %}
+      {% endif %}
+
+    </div>
+
+    {% if public_albums %}
+    <div style="margin-top:2rem">
+      <h2 class="section-title">Álbuns</h2>
+      <div class="albums-grid">
+        {% for album in public_albums %}
+          <a href="{% url 'album_detail' album.id %}" class="album-card" style="background:{{ album.gradient }}">
+            {% if album.cover_url %}
+              <img src="{{ album.cover_url }}" class="album-card-cover" alt="">
+            {% endif %}
+            <div class="album-card-content">
+              <div class="album-card-name">{{ album.name }}</div>
+              <div class="album-card-count">{{ album.media.count }} itens</div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const addBtn = document.getElementById('add-friend-btn');
+if (addBtn) {
+  addBtn.addEventListener('click', async () => {
+    const res = await fetch(`/friends/request/${addBtn.dataset.username}/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+    if (res.ok) { addBtn.textContent = 'Solicitação enviada'; addBtn.disabled = true; addBtn.className = 'btn btn-ghost'; }
+  });
+}
+</script>
+{% endblock %}

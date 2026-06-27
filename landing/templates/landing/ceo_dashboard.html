@@ -1,0 +1,133 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Photo Friends — CEO Dashboard{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'ceo_dashboard' %}" class="app-nav-link active">CEO</a>
+  </div>
+  <div class="app-nav-right">
+    <a href="{% url 'edit_profile' %}" style="display:flex;align-items:center;gap:0.5rem;text-decoration:none">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+      <span class="app-nav-name">{{ user.first_name }}</span>
+    </a>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:2.5rem;padding-top:0.5rem">
+      <div>
+        <div style="font-size:0.75rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--app-pink);margin-bottom:0.4rem">Painel exclusivo</div>
+        <h1 style="font-size:2.25rem;font-weight:900;letter-spacing:-0.03em;margin:0">👑 CEO Dashboard</h1>
+        <p style="color:var(--text-subtle);margin-top:0.4rem;font-size:0.88rem">Visão geral de toda a plataforma</p>
+      </div>
+      <div class="profile-role-badge role-ceo" style="font-size:0.8rem;padding:0.4rem 1rem">CEO</div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="ceo-stats-row">
+      <div class="ceo-stat-card">
+        <div style="font-size:1.75rem;margin-bottom:0.4rem">👥</div>
+        <div class="ceo-stat-num">{{ users.count }}</div>
+        <div class="ceo-stat-label">Usuários</div>
+      </div>
+      <div class="ceo-stat-card">
+        <div style="font-size:1.75rem;margin-bottom:0.4rem">📁</div>
+        <div class="ceo-stat-num">{{ total_albums }}</div>
+        <div class="ceo-stat-label">Álbuns</div>
+      </div>
+      <div class="ceo-stat-card">
+        <div style="font-size:1.75rem;margin-bottom:0.4rem">🏘️</div>
+        <div class="ceo-stat-num">{{ total_communities }}</div>
+        <div class="ceo-stat-label">Comunidades</div>
+      </div>
+      <div class="ceo-stat-card">
+        <div style="font-size:1.75rem;margin-bottom:0.4rem">🖼️</div>
+        <div class="ceo-stat-num">{{ total_media }}</div>
+        <div class="ceo-stat-label">Arquivos</div>
+      </div>
+    </div>
+
+    <!-- Users section -->
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:1.25rem;overflow:hidden">
+
+      <div style="padding:1.75rem 2rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between">
+        <h2 style="font-size:1.1rem;font-weight:800;margin:0">Todos os usuários</h2>
+        <span style="font-size:0.8rem;color:var(--text-subtle)">{{ users.count }} cadastrado{{ users.count|pluralize:"s" }}</span>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="ceo-table">
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th>Nome completo</th>
+              <th>Cargo</th>
+              <th style="text-align:center">Álbuns</th>
+              <th>Membro desde</th>
+              <th style="min-width:220px">Alterar cargo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr>
+              <td>
+                <a href="{% url 'profile' u.username %}" style="display:flex;align-items:center;gap:0.75rem;text-decoration:none;color:var(--text-main)">
+                  {% if u.profile.avatar_url %}
+                    <img src="{{ u.profile.avatar_url }}" class="member-avatar" alt="" style="width:36px;height:36px;flex-shrink:0">
+                  {% else %}
+                    <span class="member-avatar member-avatar--text" style="width:36px;height:36px;flex-shrink:0">{{ u.first_name|first|upper }}</span>
+                  {% endif %}
+                  <div>
+                    <div style="font-weight:700;font-size:0.88rem">@{{ u.username }}</div>
+                    <div style="font-size:0.72rem;color:var(--text-subtle)">{{ u.email|default:"sem e-mail" }}</div>
+                  </div>
+                </a>
+              </td>
+              <td style="color:var(--text-main);font-size:0.88rem">{{ u.get_full_name|default:"—" }}</td>
+              <td><span class="profile-role-badge role-{{ u.profile.role }}">{{ u.profile.get_role_display }}</span></td>
+              <td style="text-align:center;font-weight:700;color:var(--text-main)">{{ u.created_albums.count }}</td>
+              <td style="color:var(--text-subtle);font-size:0.82rem;white-space:nowrap">{{ u.date_joined|date:"d/m/Y" }}</td>
+              <td>
+                {% if u != user %}
+                <form method="post" style="display:flex;gap:0.5rem;align-items:center">
+                  {% csrf_token %}
+                  <input type="hidden" name="user_id" value="{{ u.id }}">
+                  <select name="role" class="input" style="padding:0.35rem 0.65rem;font-size:0.82rem;height:auto;width:auto;flex:1">
+                    {% for val, label in role_choices %}
+                      <option value="{{ val }}" {% if u.profile.role == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap">Salvar</button>
+                </form>
+                {% else %}
+                  <span style="color:var(--text-subtle);font-size:0.8rem;font-style:italic">Você</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

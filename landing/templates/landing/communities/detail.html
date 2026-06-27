@@ -15,14 +15,19 @@
     <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
     <a href="{% url 'communities_list' %}" class="app-nav-link active">Comunidades</a>
     <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+    <a href="{% url 'edit_profile' %}#amigos" class="app-nav-link">Amigos</a>
+    <a href="{% url 'edit_profile' %}#favoritos" class="app-nav-link">Favoritos</a>
   </div>
   <div class="app-nav-right">
-    {% if user.profile.avatar_url %}
-      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
-    {% else %}
-      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
-    {% endif %}
-    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'edit_profile' %}#adicionar-amigo" class="btn btn-primary btn-sm">+ Adicionar amigo</a>
+    <a href="{% url 'edit_profile' %}" style="display:flex;align-items:center;gap:0.5rem;text-decoration:none">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+      <span class="app-nav-name">{{ user.first_name }}</span>
+    </a>
     <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
   </div>
 </nav>
@@ -44,6 +49,15 @@
             <span class="community-stat">📁 {{ albums|length }} álbum{% if albums|length != 1 %}ns{% endif %}</span>
             <span class="community-stat">·</span>
             <span class="community-stat">👥 {{ member_count }} membro{% if member_count != 1 %}s{% endif %}</span>
+            <span class="community-stat">·</span>
+            <span class="community-privacy-badge {% if community.is_private %}privacy-private{% else %}privacy-public{% endif %}" id="privacy-badge">
+              {% if community.is_private %}🔒 Privada{% else %}🌐 Pública{% endif %}
+            </span>
+            {% if is_admin %}
+              <button class="btn btn-ghost btn-sm" id="toggle-privacy-btn" style="font-size:0.75rem;padding:0.2rem 0.6rem">
+                Tornar {% if community.is_private %}pública{% else %}privada{% endif %}
+              </button>
+            {% endif %}
           </div>
           <div class="community-members-bar">
             {% for m in memberships %}
@@ -177,6 +191,24 @@
   </div>
 </div>
 
+<!-- Chat -->
+<div class="app-content" style="padding-top:0">
+  <div class="app-container">
+    <div class="comments-panel">
+      <div class="comments-title">💬 Chat da comunidade</div>
+      <div class="comments-list" id="chat-list"></div>
+      {% if is_member %}
+      <div class="comment-input-row">
+        <input type="text" class="input" id="chat-input" placeholder="Mensagem...">
+        <button class="btn btn-primary btn-sm" id="chat-send-btn">Enviar</button>
+      </div>
+      {% else %}
+        <p style="color:var(--text-subtle);font-size:0.85rem;margin-top:0.75rem">Entre na comunidade para participar do chat.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 {% endblock %}
 
@@ -231,6 +263,58 @@
     if (confirm('Deletar "{{ community.name }}"? Todos os álbuns e fotos serão apagados.')) {
       document.getElementById('delete-community-form').submit();
     }
+  });
+
+  // Privacy toggle
+  document.getElementById('toggle-privacy-btn')?.addEventListener('click', async () => {
+    const res = await fetch("{% url 'toggle_community_privacy' community.id %}", { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+    const data = await res.json();
+    const badge = document.getElementById('privacy-badge');
+    const btn = document.getElementById('toggle-privacy-btn');
+    if (data.is_private) {
+      badge.textContent = '🔒 Privada'; badge.className = 'community-privacy-badge privacy-private';
+      btn.textContent = 'Tornar pública';
+    } else {
+      badge.textContent = '🌐 Pública'; badge.className = 'community-privacy-badge privacy-public';
+      btn.textContent = 'Tornar privada';
+    }
+  });
+
+  // Chat
+  const CHAT_URL = "{% url 'community_chat' community.id %}";
+  const chatList = document.getElementById('chat-list');
+
+  function renderMsg(c) {
+    const div = document.createElement('div');
+    div.className = 'comment-item' + (c.is_mine ? ' comment-item--mine' : '');
+    div.innerHTML = c.avatar
+      ? `<img src="${c.avatar}" class="comment-avatar" alt="">`
+      : `<div class="comment-avatar">${c.name[0]}</div>`;
+    div.innerHTML += `<div class="comment-bubble"><div class="comment-name">${c.name}</div><div class="comment-body">${c.body}</div><div class="comment-date">${c.created_at}</div></div>`;
+    return div;
+  }
+
+  async function loadChat() {
+    const res = await fetch(CHAT_URL);
+    const data = await res.json();
+    chatList.innerHTML = '';
+    data.messages.forEach(m => chatList.appendChild(renderMsg(m)));
+    chatList.scrollTop = chatList.scrollHeight;
+  }
+
+  loadChat();
+  setInterval(loadChat, 8000);
+
+  document.getElementById('chat-send-btn')?.addEventListener('click', async () => {
+    const input = document.getElementById('chat-input');
+    const body = input.value.trim(); if (!body) return;
+    const fd = new FormData(); fd.append('body', body);
+    await fetch(CHAT_URL, { method: 'POST', headers: {'X-CSRFToken': CSRF}, body: fd });
+    input.value = '';
+    loadChat();
+  });
+  document.getElementById('chat-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('chat-send-btn')?.click();
   });
 
   document.addEventListener('keydown', e => {

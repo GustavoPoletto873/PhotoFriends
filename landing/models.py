@@ -23,9 +23,17 @@ ALBUM_TAB_COLORS = [
 
 
 class UserProfile(models.Model):
+    STANDARD = 'standard'
+    PRO = 'pro'
+    CEO = 'ceo'
+    ROLE_CHOICES = [(STANDARD, 'Padrão'), (PRO, 'Pro'), (CEO, 'CEO')]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     avatar_url = models.CharField(max_length=500, blank=True)
     avatar_id = models.CharField(max_length=200, blank=True)
+    avatar_type = models.CharField(max_length=10, default='photo')  # photo, video, gif
+    bio = models.TextField(blank=True)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default=STANDARD)
     email_verified = models.BooleanField(default=False)
     verification_code = models.CharField(max_length=6, blank=True)
     verification_sent_at = models.DateTimeField(null=True, blank=True)
@@ -40,6 +48,10 @@ class UserProfile(models.Model):
             self.reset_code = code
         return code
 
+    @property
+    def is_ceo(self):
+        return self.role == self.CEO
+
     def __str__(self):
         return f'Profile({self.user.username})'
 
@@ -49,6 +61,7 @@ class Community(models.Model):
     description = models.TextField(blank=True)
     cover_url = models.CharField(max_length=500, blank=True)
     cover_id = models.CharField(max_length=200, blank=True)
+    is_private = models.BooleanField(default=False)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_communities')
     members = models.ManyToManyField(User, through='CommunityMember', related_name='communities', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -144,3 +157,50 @@ class Media(models.Model):
     @property
     def display_date(self):
         return self.taken_at or self.uploaded_at
+
+    def get_download_url(self):
+        if self.media_type == 'video':
+            return self.cloudinary_url.replace('/video/upload/', '/video/upload/fl_attachment/')
+        return self.cloudinary_url.replace('/image/upload/', '/image/upload/fl_attachment/')
+
+
+class Comment(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    media = models.ForeignKey(Media, on_delete=models.CASCADE, related_name='comments', null=True, blank=True)
+    community = models.ForeignKey(Community, on_delete=models.CASCADE, related_name='messages', null=True, blank=True)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.user.username}: {self.body[:40]}'
+
+
+class Favorite(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorites')
+    media = models.ForeignKey(Media, on_delete=models.CASCADE, related_name='favorited_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'media')
+        ordering = ['-created_at']
+
+
+class FriendRequest(models.Model):
+    PENDING = 'pending'
+    ACCEPTED = 'accepted'
+    REJECTED = 'rejected'
+    STATUS_CHOICES = [(PENDING, 'Pendente'), (ACCEPTED, 'Aceito'), (REJECTED, 'Recusado')]
+
+    from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_friend_requests')
+    to_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_friend_requests')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('from_user', 'to_user')
+
+    def __str__(self):
+        return f'{self.from_user.username} → {self.to_user.username} ({self.status})'

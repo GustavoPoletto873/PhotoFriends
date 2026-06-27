@@ -128,8 +128,19 @@
         lbImg.src = url;
       }
       lbInfo.textContent = `${lbIdx + 1} / ${allItems.length}  ·  ${uploader}  ·  ${date}`;
-      if (lbDownload) lbDownload.href = url.replace('/upload/', '/upload/fl_attachment/');
+      if (lbDownload) lbDownload.href = `/media/${el.dataset.id}/download/`;
       lightbox.classList.add('open');
+
+      // update global currentMediaId for fav/comments
+      window.currentMediaId = el.dataset.id;
+      const lbFavBtn = document.getElementById('lb-fav');
+      if (lbFavBtn) {
+        const gridFav = el.querySelector('.photo-item-fav');
+        const isFav = gridFav && gridFav.classList.contains('fav-active');
+        lbFavBtn.textContent = isFav ? '★' : '☆';
+        lbFavBtn.classList.toggle('active', isFav);
+      }
+      if (typeof loadComments === 'function') loadComments(window.currentMediaId);
     }
 
     function closeLb() {
@@ -149,11 +160,28 @@
       if (e.key === 'ArrowRight') showLb(lbIdx + 1);
     });
 
+    function showLbWithId(el) {
+      buildItems();
+      const idx = allItems.indexOf(el);
+      showLb(idx);
+      window.currentMediaId = el.dataset.id;
+      // sync fav button state
+      const lbFavBtn = document.getElementById('lb-fav');
+      if (lbFavBtn) {
+        const gridFav = el.querySelector('.photo-item-fav');
+        const isFav = gridFav && gridFav.classList.contains('fav-active');
+        lbFavBtn.textContent = isFav ? '★' : '☆';
+        lbFavBtn.classList.toggle('active', isFav);
+      }
+      // load comments
+      if (typeof loadComments === 'function') loadComments(window.currentMediaId);
+    }
+
     document.querySelectorAll('.photo-item').forEach((el, i) => {
       el.addEventListener('click', e => {
         if (e.target.classList.contains('photo-item-delete')) return;
-        buildItems();
-        showLb(allItems.indexOf(el));
+        if (e.target.classList.contains('photo-item-fav')) return;
+        showLbWithId(el);
       });
     });
   }

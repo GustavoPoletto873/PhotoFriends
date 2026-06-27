@@ -1,0 +1,99 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Photo Friends — Favoritos{% endblock %}
+
+{% block body %}
+<div class="page-anim" aria-hidden="true"></div>
+
+<nav class="app-nav">
+  <a href="{% url 'index' %}" class="app-nav-logo">
+    <span class="app-nav-logo-icon">📸</span>
+    <span class="app-nav-logo-text">Photo Friends</span>
+  </a>
+  <div class="app-nav-links">
+    <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
+    <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
+    <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+    <a href="{% url 'favorites' %}" class="app-nav-link active">Favoritos</a>
+  </div>
+  <div class="app-nav-right">
+    <a href="{% url 'edit_profile' %}" class="app-nav-avatar-wrap">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+    </a>
+    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+</nav>
+
+<div class="app-content">
+  <div class="app-container">
+
+    <div class="page-header-row">
+      <h1 class="page-title">⭐ Favoritos</h1>
+      <span class="media-count-label">{{ favorites|length }} itens</span>
+    </div>
+
+    {% if favorites %}
+      <div class="photo-grid">
+        {% for fav in favorites %}
+          <div class="photo-item"
+               data-url="{{ fav.media.cloudinary_url }}"
+               data-type="{{ fav.media.media_type }}"
+               data-id="{{ fav.media.id }}"
+               data-mine="{% if fav.media.uploaded_by == user %}1{% else %}0{% endif %}"
+               data-uploader="{{ fav.media.uploaded_by.get_full_name|default:fav.media.uploaded_by.username }}"
+               data-date="{{ fav.media.display_date|date:'d/m/Y H:i' }}">
+            {% if fav.media.media_type == 'video' %}
+              <video src="{{ fav.media.cloudinary_url }}" preload="metadata" muted></video>
+              <div class="photo-item-video-badge">▶</div>
+            {% else %}
+              <img src="{{ fav.media.cloudinary_url }}" alt="" loading="lazy">
+            {% endif %}
+            <div class="photo-item-overlay">
+              <span class="photo-item-uploader">{{ fav.media.uploaded_by.first_name }}</span>
+              <button class="photo-item-fav fav-active" data-media-id="{{ fav.media.id }}" title="Remover favorito">★</button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="media-empty" style="text-align:center;padding:4rem 1rem">
+        <div style="font-size:3rem;margin-bottom:1rem">⭐</div>
+        <p>Você ainda não tem favoritos.</p>
+        <p style="color:var(--text-subtle);font-size:0.85rem;margin-top:0.5rem">Clique na estrela (★) em qualquer foto ou vídeo para favoritar.</p>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lb-close">✕</button>
+  <button class="lightbox-nav lightbox-prev" id="lb-prev">&#8249;</button>
+  <button class="lightbox-nav lightbox-next" id="lb-next">&#8250;</button>
+  <img class="lightbox-media" id="lb-img" src="" alt="" style="display:none">
+  <video class="lightbox-media" id="lb-video" controls style="display:none"></video>
+  <div class="lightbox-info" id="lb-info"></div>
+</div>
+<div class="toast-container" id="toasts"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+document.querySelectorAll('.photo-item-fav').forEach(btn => {
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    const id = btn.dataset.mediaId;
+    const res = await fetch(`/media/${id}/favorite/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+    const data = await res.json();
+    if (!data.favorited) btn.closest('.photo-item').remove();
+  });
+});
+</script>
+<script src="{% static 'landing/js/app.js' %}"></script>
+{% endblock %}

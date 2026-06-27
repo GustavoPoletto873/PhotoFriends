@@ -15,14 +15,19 @@
     <a href="{% url 'albums_list' %}" class="app-nav-link">Álbuns</a>
     <a href="{% url 'communities_list' %}" class="app-nav-link">Comunidades</a>
     <a href="{% url 'my_uploads' %}" class="app-nav-link active">Uploads</a>
+    <a href="{% url 'edit_profile' %}#amigos" class="app-nav-link">Amigos</a>
+    <a href="{% url 'edit_profile' %}#favoritos" class="app-nav-link">Favoritos</a>
   </div>
   <div class="app-nav-right">
-    {% if user.profile.avatar_url %}
-      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
-    {% else %}
-      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
-    {% endif %}
-    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'edit_profile' %}#adicionar-amigo" class="btn btn-primary btn-sm">+ Adicionar amigo</a>
+    <a href="{% url 'edit_profile' %}" style="display:flex;align-items:center;gap:0.5rem;text-decoration:none">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+      <span class="app-nav-name">{{ user.first_name }}</span>
+    </a>
     <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
   </div>
 </nav>

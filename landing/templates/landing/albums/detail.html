@@ -15,14 +15,19 @@
     <a href="{% url 'albums_list' %}" class="app-nav-link {% if not community %}active{% endif %}">Álbuns</a>
     <a href="{% url 'communities_list' %}" class="app-nav-link {% if community %}active{% endif %}">Comunidades</a>
     <a href="{% url 'my_uploads' %}" class="app-nav-link">Uploads</a>
+    <a href="{% url 'edit_profile' %}#amigos" class="app-nav-link">Amigos</a>
+    <a href="{% url 'edit_profile' %}#favoritos" class="app-nav-link">Favoritos</a>
   </div>
   <div class="app-nav-right">
-    {% if user.profile.avatar_url %}
-      <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
-    {% else %}
-      <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
-    {% endif %}
-    <span class="app-nav-name">{{ user.first_name }}</span>
+    <a href="{% url 'edit_profile' %}#adicionar-amigo" class="btn btn-primary btn-sm">+ Adicionar amigo</a>
+    <a href="{% url 'edit_profile' %}" style="display:flex;align-items:center;gap:0.5rem;text-decoration:none">
+      {% if user.profile.avatar_url %}
+        <img src="{{ user.profile.avatar_url }}" class="app-nav-avatar" alt="{{ user.get_full_name }}">
+      {% else %}
+        <div class="app-nav-avatar app-nav-avatar--placeholder">{{ user.first_name|first|upper }}</div>
+      {% endif %}
+      <span class="app-nav-name">{{ user.first_name }}</span>
+    </a>
     <a href="{% url 'logout' %}" class="btn btn-ghost btn-sm">Sair</a>
   </div>
 </nav>
@@ -112,13 +117,11 @@
                     <img src="{{ m.cloudinary_url }}" alt="{{ m.filename }}" loading="lazy">
                   {% endif %}
                   <div class="photo-item-overlay">
-                    <span class="photo-item-uploader">{{ m.uploaded_by.first_name }}</span>
+                    <button class="photo-item-fav" data-media-id="{{ m.id }}" title="Favoritar">☆</button>
                     {% if m.uploaded_by == user %}
-                      <form method="post" action="{% url 'delete_media' m.id %}" class="delete-media-form">
-                        {% csrf_token %}
-                        <button type="button" class="photo-item-delete" data-media-id="{{ m.id }}">✕</button>
-                      </form>
+                      <button type="button" class="photo-item-delete" data-media-id="{{ m.id }}" title="Deletar">✕</button>
                     {% endif %}
+                    <span class="photo-item-uploader">{{ m.uploaded_by.first_name }}</span>
                   </div>
                 </div>
               {% endfor %}
@@ -151,9 +154,20 @@
   </div>
 </div>
 
+<!-- Comments panel -->
+<div class="comments-panel" id="comments-panel" style="display:none">
+  <div class="comments-title">💬 Comentários</div>
+  <div class="comments-list" id="comments-list"></div>
+  <div class="comment-input-row">
+    <input type="text" class="input" id="comment-input" placeholder="Escreva um comentário...">
+    <button class="btn btn-primary btn-sm" id="comment-send-btn">Enviar</button>
+  </div>
+</div>
+
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox">
-  <a class="lightbox-download" id="lb-download" href="#" target="_blank" title="Baixar">⬇</a>
+  <button class="lightbox-fav-btn" id="lb-fav" title="Favoritar">☆</button>
+  <a class="lightbox-download-btn" id="lb-download" href="#" title="Baixar">⬇</a>
   <button class="lightbox-close" id="lb-close">✕</button>
   <button class="lightbox-nav lightbox-prev" id="lb-prev">&#8249;</button>
   <button class="lightbox-nav lightbox-next" id="lb-next">&#8250;</button>
@@ -170,6 +184,68 @@
   const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
   const INVITE_URL = "{% url 'invite_member' album.id %}";
   const DELETE_ALBUM_FORM = document.getElementById('delete-album-form');
+  let currentMediaId = null;
+  let favoritedIds = new Set();
+
+  // Favorite toggle on grid
+  document.querySelectorAll('.photo-item-fav').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id = btn.dataset.mediaId;
+      const res = await fetch(`/media/${id}/favorite/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+      const data = await res.json();
+      if (data.favorited) { btn.textContent = '★'; btn.classList.add('fav-active'); favoritedIds.add(id); }
+      else { btn.textContent = '☆'; btn.classList.remove('fav-active'); favoritedIds.delete(id); }
+    });
+  });
+
+  // Lightbox fav button
+  const lbFav = document.getElementById('lb-fav');
+  lbFav.addEventListener('click', async () => {
+    if (!currentMediaId) return;
+    const res = await fetch(`/media/${currentMediaId}/favorite/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+    const data = await res.json();
+    lbFav.textContent = data.favorited ? '★' : '☆';
+    lbFav.classList.toggle('active', data.favorited);
+    const gridBtn = document.querySelector(`.photo-item-fav[data-media-id="${currentMediaId}"]`);
+    if (gridBtn) { gridBtn.textContent = data.favorited ? '★' : '☆'; gridBtn.classList.toggle('fav-active', data.favorited); }
+  });
+
+  // Comments
+  const commentsPanel = document.getElementById('comments-panel');
+  const commentsList = document.getElementById('comments-list');
+  const commentInput = document.getElementById('comment-input');
+
+  async function loadComments(mediaId) {
+    const res = await fetch(`/media/${mediaId}/comments/`);
+    const data = await res.json();
+    commentsList.innerHTML = '';
+    data.comments.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'comment-item';
+      div.innerHTML = `
+        ${c.avatar ? `<img src="${c.avatar}" class="comment-avatar" alt="">` : `<div class="comment-avatar">${c.name[0]}</div>`}
+        <div class="comment-bubble">
+          <div class="comment-name">${c.name}</div>
+          <div class="comment-body">${c.body}</div>
+          <div class="comment-date">${c.created_at}</div>
+        </div>`;
+      commentsList.appendChild(div);
+    });
+    commentsList.scrollTop = commentsList.scrollHeight;
+    commentsPanel.style.display = 'block';
+  }
+
+  document.getElementById('comment-send-btn').addEventListener('click', async () => {
+    const body = commentInput.value.trim();
+    if (!body || !currentMediaId) return;
+    const fd = new FormData();
+    fd.append('body', body);
+    await fetch(`/media/${currentMediaId}/comments/`, { method: 'POST', headers: {'X-CSRFToken': CSRF}, body: fd });
+    commentInput.value = '';
+    loadComments(currentMediaId);
+  });
+  commentInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('comment-send-btn').click(); });
 </script>
 <script src="{% static 'landing/js/app.js' %}"></script>
 {% endblock %}
