@@ -481,13 +481,19 @@
   editorRemoveBg.addEventListener('click', async () => {
     if (!editorMediaId) return;
     editorRemoveBg.disabled = true;
-    editorBgMsg.textContent = '⏳ Removendo fundo (pode levar 20-30s)...';
+    editorBgMsg.textContent = '⏳ Removendo fundo (pode levar até 60s na primeira vez)...';
     editorBgMsg.style.color = 'var(--text-subtle)';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 115000); // 115s timeout
+
     try {
       const res = await fetch(`/media/${editorMediaId}/remove-bg/`, {
         method: 'POST',
         headers: {'X-CSRFToken': CSRF},
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
         editorBgMsg.textContent = '✓ Fundo removido!';
@@ -501,8 +507,9 @@
         editorBgMsg.textContent = data.error || 'Erro ao remover fundo';
         editorBgMsg.style.color = '#f43f5e';
       }
-    } catch {
-      editorBgMsg.textContent = 'Erro de conexão';
+    } catch (err) {
+      clearTimeout(timer);
+      editorBgMsg.textContent = err.name === 'AbortError' ? 'Tempo esgotado — tente novamente' : 'Erro de conexão';
       editorBgMsg.style.color = '#f43f5e';
     }
     editorRemoveBg.disabled = false;

@@ -9,7 +9,7 @@ services:
     name: photo-friends
     runtime: python
     buildCommand: pip install -r requirements.txt && U2NET_HOME=.u2net python -c "from rembg import new_session; new_session('u2netp'); print('rembg model ready')" && python manage.py collectstatic --noinput && python manage.py migrate
-    startCommand: gunicorn edition_hub.wsgi:application --workers 2 --timeout 30
+    startCommand: gunicorn edition_hub.wsgi:application --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
