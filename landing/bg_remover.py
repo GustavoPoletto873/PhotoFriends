@@ -12,9 +12,31 @@ from PIL import Image
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 MODEL_PATH = os.path.join(MODEL_DIR, 'u2netp.onnx')
-MODEL_URL = 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx'
+MODEL_URLS = [
+    'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx',
+    'https://github.com/nadermx/backgroundremover/raw/main/models/u2netp.onnx',
+]
 
 _session = None  # cached at module level — loaded once, reused for every request
+
+
+def download_model():
+    """Download u2netp.onnx if not present. Called during build or lazily."""
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    if os.path.exists(MODEL_PATH):
+        print(f'[bg_remover] Modelo já existe: {MODEL_PATH}')
+        return
+    print(f'[bg_remover] Baixando u2netp.onnx (~4.7MB)...')
+    last_err = None
+    for url in MODEL_URLS:
+        try:
+            urllib.request.urlretrieve(url, MODEL_PATH)
+            print(f'[bg_remover] Modelo salvo em {MODEL_PATH}')
+            return
+        except Exception as e:
+            last_err = e
+            print(f'[bg_remover] Falha ao baixar de {url}: {e}')
+    raise RuntimeError(f'Não foi possível baixar o modelo: {last_err}')
 
 
 def _get_session():
@@ -23,10 +45,8 @@ def _get_session():
         return _session
 
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(
-            f'Modelo não encontrado em {MODEL_PATH}. '
-            'Execute: python manage.py download_bg_model'
-        )
+        print('[bg_remover] Modelo ausente, tentando baixar agora...')
+        download_model()
 
     import onnxruntime as ort
     opts = ort.SessionOptions()
@@ -78,12 +98,3 @@ def remove_background(img_bytes: bytes) -> bytes:
     return out.getvalue()
 
 
-def download_model():
-    """Download u2netp.onnx if not present. Called during build."""
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    if os.path.exists(MODEL_PATH):
-        print(f'[bg_remover] Modelo já existe: {MODEL_PATH}')
-        return
-    print(f'[bg_remover] Baixando u2netp.onnx (~4.7MB)...')
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    print(f'[bg_remover] Modelo salvo em {MODEL_PATH}')
