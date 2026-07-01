@@ -261,7 +261,7 @@
     </div><!-- /.photo-editor-body -->
 
     <div class="photo-editor-footer">
-      <button class="btn btn-ghost btn-sm" id="editor-reset-btn">Resetar</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="editor-reset-btn">Resetar</button>
       <div style="display:flex;gap:0.5rem;align-items:center">
         <span id="editor-save-msg" style="font-size:0.78rem;color:var(--text-subtle)"></span>
         <button class="btn btn-primary" id="editor-save-btn">Salvar alterações</button>
@@ -348,6 +348,7 @@
   const editorBgMsg    = document.getElementById('editor-bg-msg');
   const editorRemoveBg = document.getElementById('editor-remove-bg-btn');
   let editorMediaId    = null;
+  let editorOriginalUrl = null;
 
   // State
   const state = {
@@ -379,11 +380,13 @@
       vl.textContent = k === 'blur' ? '0' : '1.0';
     });
     document.getElementById('editor-grayscale-btn').classList.remove('active');
+    if (editorOriginalUrl) editorImg.src = editorOriginalUrl;
     applyPreview();
   }
 
   function openEditor(mediaId, mediaUrl) {
     editorMediaId = mediaId;
+    editorOriginalUrl = mediaUrl;
     editorImg.src = mediaUrl;
     resetState();
     editorSaveMsg.textContent = '';
@@ -461,6 +464,7 @@
         // Update thumbnail in grid and lightbox
         const thumb = document.querySelector(`.photo-item[data-id="${editorMediaId}"] img`);
         if (thumb) thumb.src = data.url + '?v=' + Date.now();
+        editorOriginalUrl = data.url;
         editorImg.src = data.url + '?v=' + Date.now();
         resetState();
         // Update edit button url
