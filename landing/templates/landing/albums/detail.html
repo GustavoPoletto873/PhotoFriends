@@ -201,22 +201,17 @@
       <!-- Controls -->
       <div class="photo-editor-controls">
 
-        <!-- Transformações geométricas -->
-        <div>
-          <div class="editor-section-label">Transformar</div>
-          <div class="editor-btn-grid">
-            <button class="editor-action-btn" id="editor-rotate-l" title="Girar 90° à esquerda">↺ Esq</button>
-            <button class="editor-action-btn" id="editor-rotate-r" title="Girar 90° à direita">↻ Dir</button>
-            <button class="editor-action-btn" id="editor-flip-h" title="Espelhar horizontal">↔ H</button>
-            <button class="editor-action-btn" id="editor-flip-v" title="Espelhar vertical">↕ V</button>
-          </div>
-        </div>
-
-        <!-- Filtros -->
+        <!-- Filtros VSCO -->
         <div>
           <div class="editor-section-label">Filtros</div>
+          <div class="editor-filter-strip" id="editor-filter-strip"></div>
+        </div>
+
+        <!-- Ajustes -->
+        <div>
+          <div class="editor-section-label">Ajustes</div>
           <div class="editor-btn-grid" style="margin-bottom:0.75rem">
-            <button class="editor-action-btn" id="editor-grayscale-btn">◑ Preto &amp; Branco</button>
+            <button type="button" class="editor-action-btn" id="editor-grayscale-btn">◑ Preto &amp; Branco</button>
           </div>
 
           <div style="display:flex;flex-direction:column;gap:0.55rem">
@@ -245,6 +240,17 @@
               <input type="range" id="sl-blur" min="0" max="10" step="0.5" value="0">
               <span class="editor-slider-val" id="val-blur">0</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Transformações geométricas -->
+        <div>
+          <div class="editor-section-label">Transformar</div>
+          <div class="editor-btn-grid">
+            <button type="button" class="editor-action-btn" id="editor-rotate-l" title="Girar 90° à esquerda">↺ Esq</button>
+            <button type="button" class="editor-action-btn" id="editor-rotate-r" title="Girar 90° à direita">↻ Dir</button>
+            <button type="button" class="editor-action-btn" id="editor-flip-h" title="Espelhar horizontal">↔ H</button>
+            <button type="button" class="editor-action-btn" id="editor-flip-v" title="Espelhar vertical">↕ V</button>
           </div>
         </div>
 
@@ -350,10 +356,28 @@
   let editorMediaId    = null;
   let editorOriginalUrl = null;
 
+  // VSCO free filters — CSS approximation
+  const VSCO_FILTERS = [
+    { key: 'normal', name: 'Normal', css: '' },
+    { key: 'a4',  name: 'A4',  css: 'brightness(1.05) contrast(0.88) saturate(0.80) sepia(0.18)' },
+    { key: 'a6',  name: 'A6',  css: 'brightness(1.08) contrast(0.85) saturate(0.68) hue-rotate(14deg) sepia(0.04)' },
+    { key: 'c1',  name: 'C1',  css: 'brightness(1.05) contrast(1.12) saturate(1.15)' },
+    { key: 'c8',  name: 'C8',  css: 'brightness(1.10) contrast(0.83) saturate(0.70) sepia(0.25)' },
+    { key: 'f2',  name: 'F2',  css: 'brightness(1.08) contrast(0.84) saturate(0.58) sepia(0.30)' },
+    { key: 'g3',  name: 'G3',  css: 'brightness(0.93) contrast(1.25) saturate(0.82) hue-rotate(8deg)' },
+    { key: 'hb1', name: 'HB1', css: 'brightness(1.00) contrast(1.22) saturate(0.92)' },
+    { key: 'hb2', name: 'HB2', css: 'brightness(1.05) contrast(1.18) saturate(1.28)' },
+    { key: 'm3',  name: 'M3',  css: 'brightness(1.10) contrast(0.87) saturate(0.65) sepia(0.16) hue-rotate(-10deg)' },
+    { key: 'm5',  name: 'M5',  css: 'brightness(1.15) contrast(0.78) saturate(0.58) sepia(0.12)' },
+    { key: 'p5',  name: 'P5',  css: 'brightness(1.05) contrast(1.15) saturate(1.35) hue-rotate(-5deg)' },
+    { key: 's2',  name: 'S2',  css: 'brightness(1.08) contrast(0.90) saturate(0.80) sepia(0.10)' },
+  ];
+
   // State
   const state = {
     rotation: 0, flipH: false, flipV: false, grayscale: false,
     brightness: 1, contrast: 1, saturation: 1, sharpness: 1, blur: 0,
+    filterPreset: 'normal',
   };
 
   function applyPreview() {
@@ -361,18 +385,45 @@
     const sx  = state.flipH ? -1 : 1;
     const sy  = state.flipV ? -1 : 1;
     editorImg.style.transform = `rotate(${rot}deg) scaleX(${sx}) scaleY(${sy})`;
-    editorImg.style.filter = [
+    const presetCss = VSCO_FILTERS.find(f => f.key === state.filterPreset)?.css || '';
+    const sliderCss = [
       `brightness(${state.brightness})`,
       `contrast(${state.contrast})`,
       `saturate(${state.saturation})`,
       state.grayscale ? 'grayscale(1)' : '',
       state.blur > 0 ? `blur(${state.blur}px)` : '',
     ].filter(Boolean).join(' ');
+    editorImg.style.filter = [presetCss, sliderCss].filter(Boolean).join(' ');
+  }
+
+  function buildFilterStrip(url) {
+    const strip = document.getElementById('editor-filter-strip');
+    strip.innerHTML = '';
+    VSCO_FILTERS.forEach(f => {
+      const chip = document.createElement('div');
+      chip.className = 'editor-filter-chip' + (f.key === state.filterPreset ? ' active' : '');
+      chip.dataset.key = f.key;
+      const img = document.createElement('img');
+      img.src = url;
+      img.style.filter = f.css || 'none';
+      img.alt = f.name;
+      const label = document.createElement('span');
+      label.textContent = f.name;
+      chip.appendChild(img);
+      chip.appendChild(label);
+      chip.addEventListener('click', () => {
+        strip.querySelectorAll('.editor-filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.filterPreset = f.key;
+        applyPreview();
+      });
+      strip.appendChild(chip);
+    });
   }
 
   function resetState() {
     Object.assign(state, { rotation:0, flipH:false, flipV:false, grayscale:false,
-      brightness:1, contrast:1, saturation:1, sharpness:1, blur:0 });
+      brightness:1, contrast:1, saturation:1, sharpness:1, blur:0, filterPreset:'normal' });
     ['brightness','contrast','saturation','sharpness','blur'].forEach(k => {
       const sl = document.getElementById(`sl-${k}`);
       const vl = document.getElementById(`val-${k}`);
@@ -380,6 +431,10 @@
       vl.textContent = k === 'blur' ? '0' : '1.0';
     });
     document.getElementById('editor-grayscale-btn').classList.remove('active');
+    const strip = document.getElementById('editor-filter-strip');
+    strip.querySelectorAll('.editor-filter-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.key === 'normal')
+    );
     if (editorOriginalUrl) editorImg.src = editorOriginalUrl;
     applyPreview();
   }
@@ -388,6 +443,8 @@
     editorMediaId = mediaId;
     editorOriginalUrl = mediaUrl;
     editorImg.src = mediaUrl;
+    state.filterPreset = 'normal';
+    buildFilterStrip(mediaUrl);
     resetState();
     editorSaveMsg.textContent = '';
     editorBgMsg.textContent = '';
@@ -455,6 +512,7 @@
           saturation: state.saturation, sharpness: state.sharpness,
           blur: state.blur, rotation: state.rotation,
           flip_h: state.flipH, flip_v: state.flipV, grayscale: state.grayscale,
+          filter: state.filterPreset,
         }),
       });
       const data = await res.json();

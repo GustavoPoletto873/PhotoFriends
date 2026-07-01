@@ -1307,6 +1307,42 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* Filter preset strip */
+.editor-filter-strip {
+    display: flex;
+    gap: 0.45rem;
+    overflow-x: auto;
+    padding: 0.1rem 0.05rem 0.4rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+.editor-filter-strip::-webkit-scrollbar { height: 3px; }
+.editor-filter-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 99px; }
+.editor-filter-chip {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0.28rem; cursor: pointer;
+    padding: 0.2rem 0.2rem 0.3rem;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background: transparent;
+    transition: border-color 0.15s;
+}
+.editor-filter-chip:hover { border-color: rgba(244,63,142,0.35); }
+.editor-filter-chip.active { border-color: var(--app-pink); }
+.editor-filter-chip img {
+    width: 56px; height: 56px;
+    object-fit: cover; border-radius: 5px;
+    display: block; pointer-events: none;
+    user-select: none; flex-shrink: 0;
+}
+.editor-filter-chip span {
+    font-size: 0.61rem; color: var(--text-subtle);
+    white-space: nowrap; pointer-events: none;
+    font-weight: 700; letter-spacing: 0.03em;
+}
+.editor-filter-chip.active span { color: var(--app-pink); }
+
 /* Remove BG button */
 .editor-remove-bg-btn {
     width: 100%; background: rgba(168,85,247,0.15);

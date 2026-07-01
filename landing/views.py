@@ -698,6 +698,64 @@ def toggle_favorite_view(request, media_id):
 
 # ── PHOTO EDITOR ─────────────────────────────────────────────────────────────
 
+def _apply_sepia(rgb, intensity):
+    import numpy as np
+    from PIL import Image as _Image
+    arr = np.array(rgb, dtype=np.float32)
+    r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+    sr = np.clip(r*0.393 + g*0.769 + b*0.189, 0, 255)
+    sg = np.clip(r*0.349 + g*0.686 + b*0.168, 0, 255)
+    sb = np.clip(r*0.272 + g*0.534 + b*0.131, 0, 255)
+    arr[:,:,0] = r*(1-intensity) + sr*intensity
+    arr[:,:,1] = g*(1-intensity) + sg*intensity
+    arr[:,:,2] = b*(1-intensity) + sb*intensity
+    return _Image.fromarray(arr.clip(0,255).astype('uint8'))
+
+
+def _apply_warmth(rgb, amount):
+    import numpy as np
+    from PIL import Image as _Image
+    arr = np.array(rgb, dtype=np.float32)
+    arr[:,:,0] = np.clip(arr[:,:,0] + amount*35, 0, 255)
+    arr[:,:,2] = np.clip(arr[:,:,2] - amount*35, 0, 255)
+    return _Image.fromarray(arr.clip(0,255).astype('uint8'))
+
+
+_FILTER_PRESETS = {
+    'normal': {},
+    'a4':  {'brightness':1.05,'contrast':0.88,'saturation':0.80,'sepia':0.18},
+    'a6':  {'brightness':1.08,'contrast':0.85,'saturation':0.68,'warm': 0.14,'sepia':0.04},
+    'c1':  {'brightness':1.05,'contrast':1.12,'saturation':1.15},
+    'c8':  {'brightness':1.10,'contrast':0.83,'saturation':0.70,'sepia':0.25},
+    'f2':  {'brightness':1.08,'contrast':0.84,'saturation':0.58,'sepia':0.30},
+    'g3':  {'brightness':0.93,'contrast':1.25,'saturation':0.82,'warm':-0.08},
+    'hb1': {'brightness':1.00,'contrast':1.22,'saturation':0.92},
+    'hb2': {'brightness':1.05,'contrast':1.18,'saturation':1.28},
+    'm3':  {'brightness':1.10,'contrast':0.87,'saturation':0.65,'sepia':0.16,'warm':-0.10},
+    'm5':  {'brightness':1.15,'contrast':0.78,'saturation':0.58,'sepia':0.12},
+    'p5':  {'brightness':1.05,'contrast':1.15,'saturation':1.35,'warm':-0.05},
+    's2':  {'brightness':1.08,'contrast':0.90,'saturation':0.80,'sepia':0.10},
+}
+
+
+def _apply_filter_preset(rgb, preset_name):
+    from PIL import ImageEnhance
+    params = _FILTER_PRESETS.get(preset_name, {})
+    if not params:
+        return rgb
+    if 'brightness' in params:
+        rgb = ImageEnhance.Brightness(rgb).enhance(params['brightness'])
+    if 'contrast' in params:
+        rgb = ImageEnhance.Contrast(rgb).enhance(params['contrast'])
+    if 'saturation' in params:
+        rgb = ImageEnhance.Color(rgb).enhance(params['saturation'])
+    if 'sepia' in params:
+        rgb = _apply_sepia(rgb, params['sepia'])
+    if 'warm' in params:
+        rgb = _apply_warmth(rgb, params['warm'])
+    return rgb
+
+
 @login_required
 @require_POST
 def edit_media_view(request, media_id):
@@ -720,6 +778,7 @@ def edit_media_view(request, media_id):
     flip_h      = bool(data.get('flip_h', False))
     flip_v      = bool(data.get('flip_v', False))
     grayscale   = bool(data.get('grayscale', False))
+    filter_preset = data.get('filter', 'normal')
 
     # Download original from Cloudinary
     resp = req_lib.get(media.cloudinary_url, timeout=30)
@@ -736,6 +795,9 @@ def edit_media_view(request, media_id):
 
     # Colour / tone adjustments (operate on RGB copy, preserve alpha)
     rgb = img.convert('RGB')
+    # Apply VSCO filter preset first, then manual adjustments on top
+    if filter_preset and filter_preset != 'normal':
+        rgb = _apply_filter_preset(rgb, filter_preset)
     if grayscale:
         rgb = rgb.convert('L').convert('RGB')
     if brightness != 1.0:
