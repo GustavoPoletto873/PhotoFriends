@@ -784,36 +784,31 @@ def remove_bg_view(request, media_id):
     resp.raise_for_status()
     img_bytes = resp.content
 
-    result_img = None
+    api_key = os.environ.get('REMOVE_BG_API_KEY', '')
+    if not api_key:
+        return JsonResponse({'error': 'Chave REMOVE_BG_API_KEY não configurada no servidor.'}, status=503)
 
-    # Try rembg with lightweight u2netp model (pre-downloaded at build time)
+    import requests as req_api
     try:
-        from rembg import remove as rembg_remove, new_session as rembg_session
-        from PIL import Image
-        import io as _io
-        session = rembg_session('u2netp')
-        output_bytes = rembg_remove(img_bytes, session=session)
-        result_img = Image.open(_io.BytesIO(output_bytes)).convert('RGBA')
-    except ImportError as e:
-        logger.warning('rembg not installed: %s', e)
+        resp_bg = req_api.post(
+            'https://api.remove.bg/v1.0/removebg',
+            files={'image_file': ('image.jpg', img_bytes)},
+            data={'size': 'auto'},
+            headers={'X-Api-Key': api_key},
+            timeout=60,
+        )
     except Exception as e:
-        logger.error('rembg error: %s', e)
+        logger.error('remove.bg request error: %s', e)
+        return JsonResponse({'error': 'Erro ao contactar API de remoção de fundo.'}, status=502)
 
-    # Fallback: backgroundremover
-    if result_img is None:
-        try:
-            from backgroundremover.bg import remove as bgr_remove
-            from PIL import Image
-            import io as _io
-            output_bytes = bgr_remove(img_bytes)
-            result_img = Image.open(_io.BytesIO(output_bytes)).convert('RGBA')
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.error('backgroundremover error: %s', e)
+    if resp_bg.status_code == 402:
+        return JsonResponse({'error': 'Créditos da API remove.bg esgotados.'}, status=402)
+    if resp_bg.status_code != 200:
+        logger.error('remove.bg error %s: %s', resp_bg.status_code, resp_bg.text)
+        return JsonResponse({'error': f'Erro na API: {resp_bg.status_code}'}, status=502)
 
-    if result_img is None:
-        return JsonResponse({'error': 'Remoção de fundo indisponível — tente novamente em alguns segundos.'}, status=503)
+    from PIL import Image
+    result_img = Image.open(io.BytesIO(resp_bg.content)).convert('RGBA')
 
     buf = io.BytesIO()
     result_img.save(buf, format='PNG')
