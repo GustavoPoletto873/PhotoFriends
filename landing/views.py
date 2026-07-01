@@ -786,15 +786,16 @@ def remove_bg_view(request, media_id):
 
     result_img = None
 
-    # Try rembg (lightweight ONNX-based)
+    # Try rembg with lightweight u2netp model (pre-downloaded at build time)
     try:
-        from rembg import remove as rembg_remove
+        from rembg import remove as rembg_remove, new_session as rembg_session
         from PIL import Image
         import io as _io
-        output_bytes = rembg_remove(img_bytes)
+        session = rembg_session('u2netp')
+        output_bytes = rembg_remove(img_bytes, session=session)
         result_img = Image.open(_io.BytesIO(output_bytes)).convert('RGBA')
-    except ImportError:
-        pass
+    except ImportError as e:
+        logger.warning('rembg not installed: %s', e)
     except Exception as e:
         logger.error('rembg error: %s', e)
 
@@ -812,7 +813,7 @@ def remove_bg_view(request, media_id):
             logger.error('backgroundremover error: %s', e)
 
     if result_img is None:
-        return JsonResponse({'error': 'Remoção de fundo não disponível neste servidor.'}, status=503)
+        return JsonResponse({'error': 'Remoção de fundo indisponível — tente novamente em alguns segundos.'}, status=503)
 
     buf = io.BytesIO()
     result_img.save(buf, format='PNG')

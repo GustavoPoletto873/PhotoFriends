@@ -10,6 +10,10 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-n+cgb$b01)xvr@59h+p#sbbj^p)1bt=7u2!a0i35&gjo6dfyj!')
+
+# Garante que rembg/u2net use o diretório do projeto (persistido entre build e runtime)
+if os.environ.get('U2NET_HOME'):
+    os.environ.setdefault('U2NET_HOME', os.environ['U2NET_HOME'])
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
