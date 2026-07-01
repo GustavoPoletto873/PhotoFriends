@@ -784,31 +784,18 @@ def remove_bg_view(request, media_id):
     resp.raise_for_status()
     img_bytes = resp.content
 
-    api_key = os.environ.get('REMOVE_BG_API_KEY', '')
-    if not api_key:
-        return JsonResponse({'error': 'Chave REMOVE_BG_API_KEY não configurada no servidor.'}, status=503)
-
-    import requests as req_api
     try:
-        resp_bg = req_api.post(
-            'https://api.remove.bg/v1.0/removebg',
-            files={'image_file': ('image.jpg', img_bytes)},
-            data={'size': 'auto'},
-            headers={'X-Api-Key': api_key},
-            timeout=60,
-        )
+        from landing.bg_remover import remove_background
+        result_bytes = remove_background(img_bytes)
+    except FileNotFoundError as e:
+        logger.error('bg_remover model missing: %s', e)
+        return JsonResponse({'error': 'Modelo não encontrado. Contate o administrador.'}, status=503)
     except Exception as e:
-        logger.error('remove.bg request error: %s', e)
-        return JsonResponse({'error': 'Erro ao contactar API de remoção de fundo.'}, status=502)
-
-    if resp_bg.status_code == 402:
-        return JsonResponse({'error': 'Créditos da API remove.bg esgotados.'}, status=402)
-    if resp_bg.status_code != 200:
-        logger.error('remove.bg error %s: %s', resp_bg.status_code, resp_bg.text)
-        return JsonResponse({'error': f'Erro na API: {resp_bg.status_code}'}, status=502)
+        logger.error('bg_remover error: %s', e)
+        return JsonResponse({'error': 'Erro ao remover fundo. Tente novamente.'}, status=500)
 
     from PIL import Image
-    result_img = Image.open(io.BytesIO(resp_bg.content)).convert('RGBA')
+    result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA')
 
     buf = io.BytesIO()
     result_img.save(buf, format='PNG')

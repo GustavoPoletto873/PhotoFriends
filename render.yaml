@@ -8,7 +8,7 @@ services:
   - type: web
     name: photo-friends
     runtime: python
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
+    buildCommand: pip install -r requirements.txt && python manage.py download_bg_model && python manage.py collectstatic --noinput && python manage.py migrate
     startCommand: gunicorn edition_hub.wsgi:application --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
@@ -37,5 +37,3 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-      - key: REMOVE_BG_API_KEY
-        sync: false

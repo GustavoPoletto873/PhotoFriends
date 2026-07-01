@@ -28,6 +28,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# ML models (baixados no build, não vão no git)
+landing/models/
+
 # Project-specific large files / old versions
 antigravity.google.zip
 temp_animation_files/
