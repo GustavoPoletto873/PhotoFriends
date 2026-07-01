@@ -51,6 +51,8 @@ urlpatterns = [
 
     # Media
     path('media/<int:media_id>/delete/', views.delete_media_view, name='delete_media'),
+    path('media/<int:media_id>/edit/', views.edit_media_view, name='edit_media'),
+    path('media/<int:media_id>/remove-bg/', views.remove_bg_view, name='remove_bg'),
 
     # CEO
     path('ceo/', views.ceo_dashboard_view, name='ceo_dashboard'),

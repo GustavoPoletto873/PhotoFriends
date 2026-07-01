@@ -696,6 +696,141 @@ def toggle_favorite_view(request, media_id):
     return JsonResponse({'favorited': True})
 
 
+# ── PHOTO EDITOR ─────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def edit_media_view(request, media_id):
+    import io, requests as req_lib
+    from PIL import Image, ImageEnhance, ImageFilter
+
+    media = get_object_or_404(Media, id=media_id, uploaded_by=request.user)
+
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Dados inválidos'}, status=400)
+
+    brightness  = max(0.1, min(3.0, float(data.get('brightness',  1.0))))
+    contrast    = max(0.1, min(3.0, float(data.get('contrast',    1.0))))
+    saturation  = max(0.0, min(4.0, float(data.get('saturation',  1.0))))
+    sharpness   = max(0.0, min(4.0, float(data.get('sharpness',   1.0))))
+    blur_radius = max(0.0, min(20.0, float(data.get('blur',       0.0))))
+    rotation    = int(data.get('rotation', 0)) % 360
+    flip_h      = bool(data.get('flip_h', False))
+    flip_v      = bool(data.get('flip_v', False))
+    grayscale   = bool(data.get('grayscale', False))
+
+    # Download original from Cloudinary
+    resp = req_lib.get(media.cloudinary_url, timeout=30)
+    resp.raise_for_status()
+    img = Image.open(io.BytesIO(resp.content)).convert('RGBA')
+
+    # Geometric transforms
+    if rotation:
+        img = img.rotate(-rotation, expand=True, resample=Image.BICUBIC)
+    if flip_h:
+        img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    if flip_v:
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+    # Colour / tone adjustments (operate on RGB copy, preserve alpha)
+    rgb = img.convert('RGB')
+    if grayscale:
+        rgb = rgb.convert('L').convert('RGB')
+    if brightness != 1.0:
+        rgb = ImageEnhance.Brightness(rgb).enhance(brightness)
+    if contrast != 1.0:
+        rgb = ImageEnhance.Contrast(rgb).enhance(contrast)
+    if saturation != 1.0:
+        rgb = ImageEnhance.Color(rgb).enhance(saturation)
+    if sharpness != 1.0:
+        rgb = ImageEnhance.Sharpness(rgb).enhance(sharpness)
+    if blur_radius > 0:
+        rgb = rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+
+    # Merge back with original alpha channel
+    r, g, b = rgb.split()
+    a = img.split()[3]
+    img = Image.merge('RGBA', (r, g, b, a))
+
+    # Upload back (overwrite + CDN invalidate)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+
+    result = cloudinary.uploader.upload(
+        buf,
+        public_id=media.cloudinary_id,
+        overwrite=True,
+        invalidate=True,
+        resource_type='image',
+        format='png',
+    )
+    media.cloudinary_url = result['secure_url']
+    media.save()
+    return JsonResponse({'url': media.cloudinary_url})
+
+
+@login_required
+@require_POST
+def remove_bg_view(request, media_id):
+    import io, requests as req_lib
+
+    media = get_object_or_404(Media, id=media_id, uploaded_by=request.user)
+
+    # Download original
+    resp = req_lib.get(media.cloudinary_url, timeout=30)
+    resp.raise_for_status()
+    img_bytes = resp.content
+
+    result_img = None
+
+    # Try rembg (lightweight ONNX-based)
+    try:
+        from rembg import remove as rembg_remove
+        from PIL import Image
+        import io as _io
+        output_bytes = rembg_remove(img_bytes)
+        result_img = Image.open(_io.BytesIO(output_bytes)).convert('RGBA')
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.error('rembg error: %s', e)
+
+    # Fallback: backgroundremover
+    if result_img is None:
+        try:
+            from backgroundremover.bg import remove as bgr_remove
+            from PIL import Image
+            import io as _io
+            output_bytes = bgr_remove(img_bytes)
+            result_img = Image.open(_io.BytesIO(output_bytes)).convert('RGBA')
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.error('backgroundremover error: %s', e)
+
+    if result_img is None:
+        return JsonResponse({'error': 'Remoção de fundo não disponível neste servidor.'}, status=503)
+
+    buf = io.BytesIO()
+    result_img.save(buf, format='PNG')
+    buf.seek(0)
+
+    result = cloudinary.uploader.upload(
+        buf,
+        public_id=media.cloudinary_id,
+        overwrite=True,
+        invalidate=True,
+        resource_type='image',
+        format='png',
+    )
+    media.cloudinary_url = result['secure_url']
+    media.save()
+    return JsonResponse({'url': media.cloudinary_url})
+
+
 # ── COMMENTS ─────────────────────────────────────────────────────────────────
 
 @login_required

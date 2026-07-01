@@ -120,6 +120,10 @@
                     <button class="photo-item-fav" data-media-id="{{ m.id }}" title="Favoritar">☆</button>
                     {% if m.uploaded_by == user %}
                       <button type="button" class="photo-item-delete" data-media-id="{{ m.id }}" title="Deletar">✕</button>
+                      <button type="button" class="photo-item-edit"
+                              data-media-id="{{ m.id }}"
+                              data-media-url="{{ m.cloudinary_url }}"
+                              title="Editar">✏</button>
                     {% endif %}
                     <span class="photo-item-uploader">{{ m.uploaded_by.first_name }}</span>
                   </div>
@@ -177,6 +181,95 @@
 </div>
 
 <div class="toast-container" id="toasts"></div>
+
+<!-- ── PHOTO EDITOR MODAL ─────────────────────────────────────────── -->
+<div class="photo-editor-overlay" id="photo-editor-overlay">
+  <div class="photo-editor-box">
+
+    <div class="photo-editor-header">
+      <h3>✏ Editar foto</h3>
+      <button class="photo-editor-close" id="editor-close-btn">✕</button>
+    </div>
+
+    <div class="photo-editor-body">
+
+      <!-- Preview -->
+      <div class="photo-editor-preview">
+        <img id="editor-preview-img" src="" alt="Preview">
+      </div>
+
+      <!-- Controls -->
+      <div class="photo-editor-controls">
+
+        <!-- Transformações geométricas -->
+        <div>
+          <div class="editor-section-label">Transformar</div>
+          <div class="editor-btn-grid">
+            <button class="editor-action-btn" id="editor-rotate-l" title="Girar 90° à esquerda">↺ Esq</button>
+            <button class="editor-action-btn" id="editor-rotate-r" title="Girar 90° à direita">↻ Dir</button>
+            <button class="editor-action-btn" id="editor-flip-h" title="Espelhar horizontal">↔ H</button>
+            <button class="editor-action-btn" id="editor-flip-v" title="Espelhar vertical">↕ V</button>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div>
+          <div class="editor-section-label">Filtros</div>
+          <div class="editor-btn-grid" style="margin-bottom:0.75rem">
+            <button class="editor-action-btn" id="editor-grayscale-btn">◑ Preto &amp; Branco</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:0.55rem">
+            <div class="editor-slider-row">
+              <label>Brilho</label>
+              <input type="range" id="sl-brightness" min="0.2" max="2" step="0.05" value="1">
+              <span class="editor-slider-val" id="val-brightness">1.0</span>
+            </div>
+            <div class="editor-slider-row">
+              <label>Contraste</label>
+              <input type="range" id="sl-contrast" min="0.2" max="2" step="0.05" value="1">
+              <span class="editor-slider-val" id="val-contrast">1.0</span>
+            </div>
+            <div class="editor-slider-row">
+              <label>Saturação</label>
+              <input type="range" id="sl-saturation" min="0" max="3" step="0.05" value="1">
+              <span class="editor-slider-val" id="val-saturation">1.0</span>
+            </div>
+            <div class="editor-slider-row">
+              <label>Nitidez</label>
+              <input type="range" id="sl-sharpness" min="0" max="4" step="0.1" value="1">
+              <span class="editor-slider-val" id="val-sharpness">1.0</span>
+            </div>
+            <div class="editor-slider-row">
+              <label>Desfoque</label>
+              <input type="range" id="sl-blur" min="0" max="10" step="0.5" value="0">
+              <span class="editor-slider-val" id="val-blur">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Remover fundo -->
+        <div>
+          <div class="editor-section-label">IA</div>
+          <button class="editor-action-btn editor-remove-bg-btn" id="editor-remove-bg-btn">
+            ✂ Remover fundo
+          </button>
+          <div id="editor-bg-msg" style="font-size:0.72rem;margin-top:0.4rem;min-height:1rem"></div>
+        </div>
+
+      </div>
+    </div><!-- /.photo-editor-body -->
+
+    <div class="photo-editor-footer">
+      <button class="btn btn-ghost btn-sm" id="editor-reset-btn">Resetar</button>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <span id="editor-save-msg" style="font-size:0.78rem;color:var(--text-subtle)"></span>
+        <button class="btn btn-primary" id="editor-save-btn">Salvar alterações</button>
+      </div>
+    </div>
+
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -246,6 +339,174 @@
     loadComments(currentMediaId);
   });
   commentInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('comment-send-btn').click(); });
+
+  // ── PHOTO EDITOR ──────────────────────────────────────────────────────────
+  const editorOverlay  = document.getElementById('photo-editor-overlay');
+  const editorImg      = document.getElementById('editor-preview-img');
+  const editorSaveBtn  = document.getElementById('editor-save-btn');
+  const editorSaveMsg  = document.getElementById('editor-save-msg');
+  const editorBgMsg    = document.getElementById('editor-bg-msg');
+  const editorRemoveBg = document.getElementById('editor-remove-bg-btn');
+  let editorMediaId    = null;
+
+  // State
+  const state = {
+    rotation: 0, flipH: false, flipV: false, grayscale: false,
+    brightness: 1, contrast: 1, saturation: 1, sharpness: 1, blur: 0,
+  };
+
+  function applyPreview() {
+    const rot = state.rotation;
+    const sx  = state.flipH ? -1 : 1;
+    const sy  = state.flipV ? -1 : 1;
+    editorImg.style.transform = `rotate(${rot}deg) scaleX(${sx}) scaleY(${sy})`;
+    editorImg.style.filter = [
+      `brightness(${state.brightness})`,
+      `contrast(${state.contrast})`,
+      `saturate(${state.saturation})`,
+      state.grayscale ? 'grayscale(1)' : '',
+      state.blur > 0 ? `blur(${state.blur}px)` : '',
+    ].filter(Boolean).join(' ');
+  }
+
+  function resetState() {
+    Object.assign(state, { rotation:0, flipH:false, flipV:false, grayscale:false,
+      brightness:1, contrast:1, saturation:1, sharpness:1, blur:0 });
+    ['brightness','contrast','saturation','sharpness','blur'].forEach(k => {
+      const sl = document.getElementById(`sl-${k}`);
+      const vl = document.getElementById(`val-${k}`);
+      sl.value = k === 'blur' ? 0 : 1;
+      vl.textContent = k === 'blur' ? '0' : '1.0';
+    });
+    document.getElementById('editor-grayscale-btn').classList.remove('active');
+    applyPreview();
+  }
+
+  function openEditor(mediaId, mediaUrl) {
+    editorMediaId = mediaId;
+    editorImg.src = mediaUrl;
+    resetState();
+    editorSaveMsg.textContent = '';
+    editorBgMsg.textContent = '';
+    editorOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeEditor() {
+    editorOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('editor-close-btn').addEventListener('click', closeEditor);
+  editorOverlay.addEventListener('click', e => { if (e.target === editorOverlay) closeEditor(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && editorOverlay.classList.contains('open')) closeEditor(); });
+
+  // Open editor on ✏ click
+  document.querySelectorAll('.photo-item-edit').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openEditor(btn.dataset.mediaId, btn.dataset.mediaUrl);
+    });
+  });
+
+  // Rotate
+  document.getElementById('editor-rotate-l').addEventListener('click', () => { state.rotation = (state.rotation - 90 + 360) % 360; applyPreview(); });
+  document.getElementById('editor-rotate-r').addEventListener('click', () => { state.rotation = (state.rotation + 90) % 360; applyPreview(); });
+
+  // Flip
+  document.getElementById('editor-flip-h').addEventListener('click', () => { state.flipH = !state.flipH; applyPreview(); });
+  document.getElementById('editor-flip-v').addEventListener('click', () => { state.flipV = !state.flipV; applyPreview(); });
+
+  // Grayscale toggle
+  document.getElementById('editor-grayscale-btn').addEventListener('click', function() {
+    state.grayscale = !state.grayscale;
+    this.classList.toggle('active', state.grayscale);
+    applyPreview();
+  });
+
+  // Sliders
+  [['brightness',1],['contrast',1],['saturation',1],['sharpness',1],['blur',0]].forEach(([key, def]) => {
+    const sl = document.getElementById(`sl-${key}`);
+    const vl = document.getElementById(`val-${key}`);
+    sl.addEventListener('input', () => {
+      state[key] = parseFloat(sl.value);
+      vl.textContent = parseFloat(sl.value).toFixed(key === 'blur' ? 0 : 1);
+      applyPreview();
+    });
+  });
+
+  // Reset
+  document.getElementById('editor-reset-btn').addEventListener('click', resetState);
+
+  // Save
+  editorSaveBtn.addEventListener('click', async () => {
+    if (!editorMediaId) return;
+    editorSaveBtn.disabled = true;
+    editorSaveMsg.textContent = 'Salvando...';
+    try {
+      const res = await fetch(`/media/${editorMediaId}/edit/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          brightness: state.brightness, contrast: state.contrast,
+          saturation: state.saturation, sharpness: state.sharpness,
+          blur: state.blur, rotation: state.rotation,
+          flip_h: state.flipH, flip_v: state.flipV, grayscale: state.grayscale,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        editorSaveMsg.textContent = '✓ Salvo!';
+        editorSaveMsg.style.color = '#43e97b';
+        // Update thumbnail in grid and lightbox
+        const thumb = document.querySelector(`.photo-item[data-id="${editorMediaId}"] img`);
+        if (thumb) thumb.src = data.url + '?v=' + Date.now();
+        editorImg.src = data.url + '?v=' + Date.now();
+        resetState();
+        // Update edit button url
+        const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${editorMediaId}"]`);
+        if (editBtn) editBtn.dataset.mediaUrl = data.url;
+      } else {
+        editorSaveMsg.textContent = data.error || 'Erro ao salvar';
+        editorSaveMsg.style.color = '#f43f5e';
+      }
+    } catch {
+      editorSaveMsg.textContent = 'Erro de conexão';
+      editorSaveMsg.style.color = '#f43f5e';
+    }
+    editorSaveBtn.disabled = false;
+  });
+
+  // Remove background
+  editorRemoveBg.addEventListener('click', async () => {
+    if (!editorMediaId) return;
+    editorRemoveBg.disabled = true;
+    editorBgMsg.textContent = '⏳ Removendo fundo (pode levar 20-30s)...';
+    editorBgMsg.style.color = 'var(--text-subtle)';
+    try {
+      const res = await fetch(`/media/${editorMediaId}/remove-bg/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF},
+      });
+      const data = await res.json();
+      if (res.ok) {
+        editorBgMsg.textContent = '✓ Fundo removido!';
+        editorBgMsg.style.color = '#43e97b';
+        editorImg.src = data.url + '?v=' + Date.now();
+        const thumb = document.querySelector(`.photo-item[data-id="${editorMediaId}"] img`);
+        if (thumb) thumb.src = data.url + '?v=' + Date.now();
+        const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${editorMediaId}"]`);
+        if (editBtn) editBtn.dataset.mediaUrl = data.url;
+      } else {
+        editorBgMsg.textContent = data.error || 'Erro ao remover fundo';
+        editorBgMsg.style.color = '#f43f5e';
+      }
+    } catch {
+      editorBgMsg.textContent = 'Erro de conexão';
+      editorBgMsg.style.color = '#f43f5e';
+    }
+    editorRemoveBg.disabled = false;
+  });
 </script>
 <script src="{% static 'landing/js/app.js' %}"></script>
 {% endblock %}
