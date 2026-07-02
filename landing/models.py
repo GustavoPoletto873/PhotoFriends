@@ -143,6 +143,8 @@ class Media(models.Model):
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
     cloudinary_url = models.CharField(max_length=500)
     cloudinary_id = models.CharField(max_length=200)
+    # Backup da imagem original (preenchido no primeiro edit destrutivo; vazio = nunca editada)
+    original_url = models.CharField(max_length=500, blank=True, default='')
     media_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     filename = models.CharField(max_length=200, blank=True)
     taken_at = models.DateTimeField(null=True, blank=True)

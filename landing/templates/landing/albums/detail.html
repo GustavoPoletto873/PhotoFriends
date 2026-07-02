@@ -123,7 +123,13 @@
                       <button type="button" class="photo-item-edit"
                               data-media-id="{{ m.id }}"
                               data-media-url="{{ m.cloudinary_url }}"
+                              data-edited="{% if m.original_url %}1{% else %}0{% endif %}"
                               title="Editar">✏</button>
+                    {% endif %}
+                    {% if m.media_type == 'photo' %}
+                      <button type="button" class="photo-item-share"
+                              data-media-url="{{ m.cloudinary_url }}"
+                              title="Compartilhar">📤</button>
                     {% endif %}
                     <span class="photo-item-uploader">{{ m.uploaded_by.first_name }}</span>
                   </div>
@@ -172,12 +178,35 @@
 <div class="lightbox" id="lightbox">
   <button class="lightbox-fav-btn" id="lb-fav" title="Favoritar">☆</button>
   <a class="lightbox-download-btn" id="lb-download" href="#" title="Baixar">⬇</a>
+  <button class="lightbox-share-btn" id="lb-share" title="Compartilhar">📤</button>
   <button class="lightbox-close" id="lb-close">✕</button>
   <button class="lightbox-nav lightbox-prev" id="lb-prev">&#8249;</button>
   <button class="lightbox-nav lightbox-next" id="lb-next">&#8250;</button>
   <img class="lightbox-media" id="lb-img" src="" alt="" style="display:none">
   <video class="lightbox-media" id="lb-video" controls style="display:none"></video>
   <div class="lightbox-info" id="lb-info"></div>
+</div>
+
+<!-- Share modal — templates por rede social -->
+<div class="modal-overlay" id="share-modal">
+  <div class="modal-box share-modal-box">
+    <h2 class="modal-title">📤 Compartilhar</h2>
+
+    <div class="share-dest-grid" id="share-dest-grid"></div>
+
+    <div class="share-preview-wrap">
+      <img id="share-preview-img" src="" alt="Preview do formato">
+    </div>
+
+    <div class="share-hint" id="share-hint"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost btn-sm" id="share-cancel-btn">Cancelar</button>
+      <a class="btn btn-ghost btn-sm" id="share-download-btn" href="#">⬇ Baixar</a>
+      <a class="btn btn-ghost btn-sm" id="share-open-link" href="#" target="_blank" rel="noopener" style="display:none"></a>
+      <button type="button" class="btn btn-primary" id="share-do-btn">📤 Compartilhar</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast-container" id="toasts"></div>
@@ -231,7 +260,7 @@
               <span class="editor-slider-val" id="val-saturation">1.0</span>
             </div>
             <div class="editor-slider-row">
-              <label>Nitidez</label>
+              <label title="Sem preview — aplicada ao salvar">Nitidez ⓘ</label>
               <input type="range" id="sl-sharpness" min="0" max="4" step="0.1" value="1">
               <span class="editor-slider-val" id="val-sharpness">1.0</span>
             </div>
@@ -356,21 +385,22 @@
   let editorMediaId    = null;
   let editorOriginalUrl = null;
 
-  // VSCO free filters — CSS approximation
+  // Filtros VSCO — devem espelhar 1:1 os _FILTER_PRESETS de landing/views.py
+  // (mesmos valores e mesma ordem; o servidor reproduz a matemática do CSS).
   const VSCO_FILTERS = [
     { key: 'normal', name: 'Normal', css: '' },
-    { key: 'a4',  name: 'A4',  css: 'brightness(1.05) contrast(0.88) saturate(0.80) sepia(0.18)' },
-    { key: 'a6',  name: 'A6',  css: 'brightness(1.08) contrast(0.85) saturate(0.68) hue-rotate(14deg) sepia(0.04)' },
-    { key: 'c1',  name: 'C1',  css: 'brightness(1.05) contrast(1.12) saturate(1.15)' },
-    { key: 'c8',  name: 'C8',  css: 'brightness(1.10) contrast(0.83) saturate(0.70) sepia(0.25)' },
-    { key: 'f2',  name: 'F2',  css: 'brightness(1.08) contrast(0.84) saturate(0.58) sepia(0.30)' },
-    { key: 'g3',  name: 'G3',  css: 'brightness(0.93) contrast(1.25) saturate(0.82) hue-rotate(8deg)' },
-    { key: 'hb1', name: 'HB1', css: 'brightness(1.00) contrast(1.22) saturate(0.92)' },
-    { key: 'hb2', name: 'HB2', css: 'brightness(1.05) contrast(1.18) saturate(1.28)' },
-    { key: 'm3',  name: 'M3',  css: 'brightness(1.10) contrast(0.87) saturate(0.65) sepia(0.16) hue-rotate(-10deg)' },
-    { key: 'm5',  name: 'M5',  css: 'brightness(1.15) contrast(0.78) saturate(0.58) sepia(0.12)' },
-    { key: 'p5',  name: 'P5',  css: 'brightness(1.05) contrast(1.15) saturate(1.35) hue-rotate(-5deg)' },
-    { key: 's2',  name: 'S2',  css: 'brightness(1.08) contrast(0.90) saturate(0.80) sepia(0.10)' },
+    { key: 'a4',  name: 'A4',  css: 'contrast(0.90) brightness(1.06) saturate(0.75) sepia(0.20) hue-rotate(-8deg)' },
+    { key: 'a6',  name: 'A6',  css: 'brightness(1.08) contrast(0.86) saturate(0.62) sepia(0.06)' },
+    { key: 'c1',  name: 'C1',  css: 'contrast(1.12) brightness(1.04) saturate(1.28) hue-rotate(-6deg)' },
+    { key: 'c8',  name: 'C8',  css: 'brightness(1.10) contrast(0.88) saturate(0.80) sepia(0.14) hue-rotate(6deg)' },
+    { key: 'f2',  name: 'F2',  css: 'brightness(1.06) contrast(0.80) saturate(0.55) sepia(0.28)' },
+    { key: 'g3',  name: 'G3',  css: 'brightness(0.96) contrast(1.18) saturate(0.88) sepia(0.14) hue-rotate(-10deg)' },
+    { key: 'hb1', name: 'HB1', css: 'contrast(1.16) brightness(1.02) saturate(0.88) hue-rotate(6deg)' },
+    { key: 'hb2', name: 'HB2', css: 'contrast(1.24) saturate(0.94) hue-rotate(8deg)' },
+    { key: 'm3',  name: 'M3',  css: 'brightness(1.06) contrast(0.90) saturate(0.70) sepia(0.20) hue-rotate(18deg)' },
+    { key: 'm5',  name: 'M5',  css: 'brightness(1.12) contrast(0.80) saturate(0.60) sepia(0.14) hue-rotate(-14deg)' },
+    { key: 'p5',  name: 'P5',  css: 'brightness(1.04) contrast(1.14) saturate(1.30) sepia(0.08) hue-rotate(-6deg)' },
+    { key: 's2',  name: 'S2',  css: 'brightness(1.08) contrast(0.95) saturate(0.85) sepia(0.08)' },
   ];
 
   // State
@@ -495,13 +525,62 @@
     });
   });
 
-  // Reset
-  document.getElementById('editor-reset-btn').addEventListener('click', resetState);
+  // Atualiza URL da foto na grade, no lightbox e no botão de editar
+  function syncMediaUrl(mediaId, url, edited) {
+    const fresh = url + '?v=' + Date.now();
+    const item = document.querySelector(`.photo-item[data-id="${mediaId}"]`);
+    if (item) {
+      item.dataset.url = url;
+      const thumb = item.querySelector('img');
+      if (thumb) thumb.src = fresh;
+      const shareBtn = item.querySelector('.photo-item-share');
+      if (shareBtn) shareBtn.dataset.mediaUrl = url;
+    }
+    const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${mediaId}"]`);
+    if (editBtn) {
+      editBtn.dataset.mediaUrl = url;
+      editBtn.dataset.edited = edited ? '1' : '0';
+    }
+  }
+
+  // Reset — limpa os ajustes do preview e, se a foto já tinha edição SALVA,
+  // restaura a imagem original no servidor (senão a foto continuava editada ao sair)
+  const editorResetBtn = document.getElementById('editor-reset-btn');
+  editorResetBtn.addEventListener('click', async () => {
+    resetState();
+    const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${editorMediaId}"]`);
+    if (!editorMediaId || !editBtn || editBtn.dataset.edited !== '1') return;
+    editorResetBtn.disabled = true;
+    editorSaveMsg.style.color = 'var(--text-subtle)';
+    editorSaveMsg.textContent = 'Restaurando original...';
+    try {
+      const res = await fetch(`/media/${editorMediaId}/reset/`, { method: 'POST', headers: {'X-CSRFToken': CSRF} });
+      const data = await res.json();
+      if (res.ok && data.restored) {
+        editorOriginalUrl = data.url;
+        editorImg.src = data.url + '?v=' + Date.now();
+        buildFilterStrip(data.url + '?v=' + Date.now());
+        syncMediaUrl(editorMediaId, data.url, false);
+        editorSaveMsg.textContent = '✓ Original restaurada';
+        editorSaveMsg.style.color = '#43e97b';
+      } else if (!res.ok) {
+        editorSaveMsg.textContent = data.error || 'Erro ao restaurar';
+        editorSaveMsg.style.color = '#f43f5e';
+      } else {
+        editorSaveMsg.textContent = '';
+      }
+    } catch {
+      editorSaveMsg.textContent = 'Erro de conexão';
+      editorSaveMsg.style.color = '#f43f5e';
+    }
+    editorResetBtn.disabled = false;
+  });
 
   // Save
   editorSaveBtn.addEventListener('click', async () => {
     if (!editorMediaId) return;
     editorSaveBtn.disabled = true;
+    editorSaveMsg.style.color = 'var(--text-subtle)';
     editorSaveMsg.textContent = 'Salvando...';
     try {
       const res = await fetch(`/media/${editorMediaId}/edit/`, {
@@ -510,7 +589,10 @@
         body: JSON.stringify({
           brightness: state.brightness, contrast: state.contrast,
           saturation: state.saturation, sharpness: state.sharpness,
-          blur: state.blur, rotation: state.rotation,
+          blur: state.blur,
+          // escala preview → resolução real, p/ desfoque salvo igual ao do preview
+          blur_scale: Math.max(1, editorImg.naturalWidth / Math.max(1, editorImg.clientWidth)),
+          rotation: state.rotation,
           flip_h: state.flipH, flip_v: state.flipV, grayscale: state.grayscale,
           filter: state.filterPreset,
         }),
@@ -519,15 +601,11 @@
       if (res.ok) {
         editorSaveMsg.textContent = '✓ Salvo!';
         editorSaveMsg.style.color = '#43e97b';
-        // Update thumbnail in grid and lightbox
-        const thumb = document.querySelector(`.photo-item[data-id="${editorMediaId}"] img`);
-        if (thumb) thumb.src = data.url + '?v=' + Date.now();
         editorOriginalUrl = data.url;
         editorImg.src = data.url + '?v=' + Date.now();
+        buildFilterStrip(data.url + '?v=' + Date.now());
+        syncMediaUrl(editorMediaId, data.url, true);
         resetState();
-        // Update edit button url
-        const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${editorMediaId}"]`);
-        if (editBtn) editBtn.dataset.mediaUrl = data.url;
       } else {
         editorSaveMsg.textContent = data.error || 'Erro ao salvar';
         editorSaveMsg.style.color = '#f43f5e';
@@ -560,11 +638,10 @@
       if (res.ok) {
         editorBgMsg.textContent = '✓ Fundo removido!';
         editorBgMsg.style.color = '#43e97b';
+        editorOriginalUrl = data.url;
         editorImg.src = data.url + '?v=' + Date.now();
-        const thumb = document.querySelector(`.photo-item[data-id="${editorMediaId}"] img`);
-        if (thumb) thumb.src = data.url + '?v=' + Date.now();
-        const editBtn = document.querySelector(`.photo-item-edit[data-media-id="${editorMediaId}"]`);
-        if (editBtn) editBtn.dataset.mediaUrl = data.url;
+        buildFilterStrip(data.url + '?v=' + Date.now());
+        syncMediaUrl(editorMediaId, data.url, true);
       } else {
         editorBgMsg.textContent = data.error || 'Erro ao remover fundo';
         editorBgMsg.style.color = '#f43f5e';
@@ -575,6 +652,152 @@
       editorBgMsg.style.color = '#f43f5e';
     }
     editorRemoveBg.disabled = false;
+  });
+
+  // ── SHARE PARA REDES SOCIAIS ──────────────────────────────────────────────
+  // Templates de formato por rede; a imagem é gerada na hora por transformação
+  // de URL do Cloudinary (c_pad com fundo desfocado p/ formatos fixos).
+  const SHARE_DESTS = [
+    { key: 'ig_story', icon: '📱', label: 'Story',    net: 'Instagram Story',  ratio: '9:16',     w: 1080, h: 1920, pad: true },
+    { key: 'ig_feed',  icon: '🖼️', label: 'Feed',     net: 'Instagram Feed',   ratio: '4:5',      w: 1080, h: 1350, pad: true },
+    { key: 'ig_dm',    icon: '✈️', label: 'Direct',   net: 'Instagram Direct', ratio: '1:1',      w: 1080, h: 1080, pad: true },
+    { key: 'whatsapp', icon: '💬', label: 'WhatsApp', net: 'WhatsApp',         ratio: 'Original', w: 1600, pad: false,
+      link: u => `https://wa.me/?text=${encodeURIComponent(u)}` },
+    { key: 'facebook', icon: '📘', label: 'Facebook', net: 'Facebook',         ratio: 'Original', w: 1600, pad: false,
+      link: u => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}` },
+  ];
+
+  const shareModal       = document.getElementById('share-modal');
+  const shareDestGrid    = document.getElementById('share-dest-grid');
+  const sharePreviewImg  = document.getElementById('share-preview-img');
+  const shareHint        = document.getElementById('share-hint');
+  const shareDoBtn       = document.getElementById('share-do-btn');
+  const shareDownloadBtn = document.getElementById('share-download-btn');
+  const shareOpenLink    = document.getElementById('share-open-link');
+  let shareBaseUrl = null;
+  let shareDestKey = 'ig_story';
+
+  // public_id do Cloudinary a partir da URL ("pasta/arquivo" → "pasta:arquivo" p/ overlay)
+  function sharePublicId() {
+    const m = shareBaseUrl.match(/\/image\/upload\/(?:v\d+\/)?(.+?)(\.[a-z0-9]+)?$/i);
+    return m ? m[1].replace(/\//g, ':') : null;
+  }
+
+  // Formatos fixos (Story/Feed/Direct): foto inteira (c_fit) sobre a própria
+  // imagem ampliada e desfocada como fundo — visual clássico de story.
+  function shareTransform(dest, w, h, quality) {
+    if (!dest.pad) return [`w_${w},c_limit`, `f_jpg,${quality}`];
+    const pid = sharePublicId();
+    if (!pid) return [`w_${w},h_${h},c_pad,b_auto`, `f_jpg,${quality}`];
+    return [
+      `w_${w},h_${h},c_fill,e_blur:2000`,
+      `l_${pid},w_${w},h_${h},c_fit`,
+      'fl_layer_apply',
+      `f_jpg,${quality}`,
+    ];
+  }
+
+  function shareUrlFor(dest, opts) {
+    const parts = shareTransform(dest, dest.w, dest.h, 'q_auto:good');
+    if (opts && opts.attachment) parts[parts.length - 1] += ',fl_attachment:photo-friends';
+    return shareBaseUrl.replace('/image/upload/', `/image/upload/${parts.join('/')}/`);
+  }
+
+  function shareChipThumbUrl(dest) {
+    const w = 120, h = dest.pad ? Math.round(120 * dest.h / dest.w) : null;
+    return shareBaseUrl.replace('/image/upload/',
+      `/image/upload/${shareTransform(dest, w, h, 'q_auto:low').join('/')}/`);
+  }
+
+  function updateShareUI() {
+    const dest = SHARE_DESTS.find(d => d.key === shareDestKey);
+    shareDestGrid.querySelectorAll('.share-dest-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.key === dest.key));
+    sharePreviewImg.src = shareUrlFor(dest);
+    shareDownloadBtn.href = shareUrlFor(dest, { attachment: true });
+    if (dest.link) {
+      shareOpenLink.style.display = '';
+      shareOpenLink.href = dest.link(shareUrlFor(dest));
+      shareOpenLink.textContent = `Abrir ${dest.label}`;
+      shareHint.textContent = `Formatada para ${dest.net}. No celular, “Compartilhar” abre o app direto.`;
+    } else {
+      shareOpenLink.style.display = 'none';
+      shareHint.textContent = `Formatada para ${dest.net} (${dest.ratio}). No celular, “Compartilhar” abre o Instagram direto; no computador, baixe e poste pelo app.`;
+    }
+    shareHint.style.color = 'var(--text-subtle)';
+  }
+
+  function buildShareChips() {
+    shareDestGrid.innerHTML = '';
+    SHARE_DESTS.forEach(dest => {
+      const chip = document.createElement('div');
+      chip.className = 'share-dest-chip';
+      chip.dataset.key = dest.key;
+      const img = document.createElement('img');
+      img.src = shareChipThumbUrl(dest);
+      img.alt = dest.net;
+      const label = document.createElement('span');
+      label.className = 'share-dest-label';
+      label.textContent = `${dest.icon} ${dest.label}`;
+      const ratio = document.createElement('span');
+      ratio.className = 'share-dest-ratio';
+      ratio.textContent = dest.ratio;
+      chip.append(img, label, ratio);
+      chip.addEventListener('click', () => { shareDestKey = dest.key; updateShareUI(); });
+      shareDestGrid.appendChild(chip);
+    });
+  }
+
+  function openShareModal(mediaUrl) {
+    if (!mediaUrl) return;
+    shareBaseUrl = mediaUrl.split('?')[0];
+    buildShareChips();
+    updateShareUI();
+    shareModal.classList.add('open');
+  }
+  function closeShareModal() { shareModal.classList.remove('open'); }
+
+  document.getElementById('share-cancel-btn').addEventListener('click', closeShareModal);
+  shareModal.addEventListener('click', e => { if (e.target === shareModal) closeShareModal(); });
+
+  document.querySelectorAll('.photo-item-share').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openShareModal(btn.dataset.mediaUrl); });
+  });
+  document.getElementById('lb-share').addEventListener('click', function() {
+    openShareModal(this.dataset.mediaUrl);
+  });
+
+  shareDoBtn.addEventListener('click', async () => {
+    const dest = SHARE_DESTS.find(d => d.key === shareDestKey);
+    const url = shareUrlFor(dest);
+    shareDoBtn.disabled = true;
+    shareHint.textContent = 'Preparando imagem...';
+    try {
+      const blob = await (await fetch(url)).blob();
+      const file = new File([blob], 'photo-friends.jpg', { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Celular: abre o menu nativo já com a imagem formatada
+        await navigator.share({ files: [file], title: 'Photo Friends' });
+        shareHint.textContent = '✓ Compartilhado!';
+        shareHint.style.color = '#43e97b';
+      } else if (dest.link) {
+        // Desktop: abre a rede em nova aba com o link da imagem formatada
+        window.open(dest.link(url), '_blank', 'noopener');
+        shareHint.textContent = `${dest.net} aberto em nova aba.`;
+      } else {
+        // Desktop + Instagram: não há como postar via web — baixa a imagem formatada
+        shareDownloadBtn.click();
+        shareHint.textContent = 'Imagem baixada — poste pelo app do Instagram.';
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        shareHint.textContent = 'Não foi possível compartilhar — use o botão Baixar.';
+        shareHint.style.color = '#f43f5e';
+      } else {
+        updateShareUI();
+      }
+    }
+    shareDoBtn.disabled = false;
   });
 </script>
 <script src="{% static 'landing/js/app.js' %}"></script>

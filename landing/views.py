@@ -697,63 +697,98 @@ def toggle_favorite_view(request, media_id):
 
 
 # ── PHOTO EDITOR ─────────────────────────────────────────────────────────────
+# O preview no navegador usa funções de filtro CSS (brightness/contrast/saturate/
+# sepia/hue-rotate/grayscale). Para o resultado salvo ficar IGUAL ao preview,
+# implementamos aqui a mesma matemática da spec W3C Filter Effects: cada função
+# é uma transformação afim de cor (v' = M·v + off, valores em 0..1), compostas
+# na mesma ordem do CSS e aplicadas de uma vez só via numpy.
+# IMPORTANTE: os presets abaixo devem espelhar 1:1 os VSCO_FILTERS do template
+# landing/templates/landing/albums/detail.html.
 
-def _apply_sepia(rgb, intensity):
+def _css_filter_matrix(op, val):
+    """Retorna (M 3x3, offset 3) da função de filtro CSS `op(val)`."""
+    import numpy as np
+    if op == 'brightness':
+        return np.eye(3) * val, np.zeros(3)
+    if op == 'contrast':
+        return np.eye(3) * val, np.full(3, (1.0 - val) / 2.0)
+    if op == 'saturate':
+        s = val
+        return np.array([
+            [0.213 + 0.787*s, 0.715 - 0.715*s, 0.072 - 0.072*s],
+            [0.213 - 0.213*s, 0.715 + 0.285*s, 0.072 - 0.072*s],
+            [0.213 - 0.213*s, 0.715 - 0.715*s, 0.072 + 0.928*s],
+        ]), np.zeros(3)
+    if op == 'grayscale':
+        a = val
+        sat = 1.0 - a
+        return _css_filter_matrix('saturate', sat)
+    if op == 'sepia':
+        a = val
+        ident = np.eye(3)
+        sepia = np.array([
+            [0.393, 0.769, 0.189],
+            [0.349, 0.686, 0.168],
+            [0.272, 0.534, 0.131],
+        ])
+        return ident * (1 - a) + sepia * a, np.zeros(3)
+    if op == 'hue-rotate':
+        import math
+        c, s = math.cos(math.radians(val)), math.sin(math.radians(val))
+        return np.array([
+            [0.213 + c*0.787 - s*0.213, 0.715 - c*0.715 - s*0.715, 0.072 - c*0.072 + s*0.928],
+            [0.213 - c*0.213 + s*0.143, 0.715 + c*0.285 + s*0.140, 0.072 - c*0.072 - s*0.283],
+            [0.213 - c*0.213 - s*0.787, 0.715 - c*0.715 + s*0.715, 0.072 + c*0.928 + s*0.072],
+        ]), np.zeros(3)
+    import numpy as _np
+    return _np.eye(3), _np.zeros(3)
+
+
+def _apply_css_filters(rgb_img, ops):
+    """Aplica uma sequência de funções de filtro CSS [(op, val), ...] na ordem dada.
+
+    Como no navegador, o resultado é limitado a [0,1] ENTRE cada função (cada
+    filtro CSS gera uma imagem intermediária) — compor tudo numa matriz única
+    divergiria do preview quando um passo intermediário satura.
+    """
     import numpy as np
     from PIL import Image as _Image
-    arr = np.array(rgb, dtype=np.float32)
-    r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
-    sr = np.clip(r*0.393 + g*0.769 + b*0.189, 0, 255)
-    sg = np.clip(r*0.349 + g*0.686 + b*0.168, 0, 255)
-    sb = np.clip(r*0.272 + g*0.534 + b*0.131, 0, 255)
-    arr[:,:,0] = r*(1-intensity) + sr*intensity
-    arr[:,:,1] = g*(1-intensity) + sg*intensity
-    arr[:,:,2] = b*(1-intensity) + sb*intensity
-    return _Image.fromarray(arr.clip(0,255).astype('uint8'))
+    arr = np.asarray(rgb_img, dtype=np.float32) / 255.0
+    for op, val in ops:
+        M, off = _css_filter_matrix(op, val)
+        arr = np.clip(arr @ M.T.astype(np.float32) + off.astype(np.float32), 0.0, 1.0)
+    return _Image.fromarray((arr * 255.0).round().astype('uint8'))
 
 
-def _apply_warmth(rgb, amount):
-    import numpy as np
-    from PIL import Image as _Image
-    arr = np.array(rgb, dtype=np.float32)
-    arr[:,:,0] = np.clip(arr[:,:,0] + amount*35, 0, 255)
-    arr[:,:,2] = np.clip(arr[:,:,2] - amount*35, 0, 255)
-    return _Image.fromarray(arr.clip(0,255).astype('uint8'))
-
-
+# Espelha exatamente os VSCO_FILTERS do template (mesmos valores, mesma ordem).
 _FILTER_PRESETS = {
-    'normal': {},
-    'a4':  {'brightness':1.05,'contrast':0.88,'saturation':0.80,'sepia':0.18},
-    'a6':  {'brightness':1.08,'contrast':0.85,'saturation':0.68,'warm': 0.14,'sepia':0.04},
-    'c1':  {'brightness':1.05,'contrast':1.12,'saturation':1.15},
-    'c8':  {'brightness':1.10,'contrast':0.83,'saturation':0.70,'sepia':0.25},
-    'f2':  {'brightness':1.08,'contrast':0.84,'saturation':0.58,'sepia':0.30},
-    'g3':  {'brightness':0.93,'contrast':1.25,'saturation':0.82,'warm':-0.08},
-    'hb1': {'brightness':1.00,'contrast':1.22,'saturation':0.92},
-    'hb2': {'brightness':1.05,'contrast':1.18,'saturation':1.28},
-    'm3':  {'brightness':1.10,'contrast':0.87,'saturation':0.65,'sepia':0.16,'warm':-0.10},
-    'm5':  {'brightness':1.15,'contrast':0.78,'saturation':0.58,'sepia':0.12},
-    'p5':  {'brightness':1.05,'contrast':1.15,'saturation':1.35,'warm':-0.05},
-    's2':  {'brightness':1.08,'contrast':0.90,'saturation':0.80,'sepia':0.10},
+    'normal': [],
+    'a4':  [('contrast', 0.90), ('brightness', 1.06), ('saturate', 0.75), ('sepia', 0.20), ('hue-rotate', -8)],
+    'a6':  [('brightness', 1.08), ('contrast', 0.86), ('saturate', 0.62), ('sepia', 0.06)],
+    'c1':  [('contrast', 1.12), ('brightness', 1.04), ('saturate', 1.28), ('hue-rotate', -6)],
+    'c8':  [('brightness', 1.10), ('contrast', 0.88), ('saturate', 0.80), ('sepia', 0.14), ('hue-rotate', 6)],
+    'f2':  [('brightness', 1.06), ('contrast', 0.80), ('saturate', 0.55), ('sepia', 0.28)],
+    'g3':  [('brightness', 0.96), ('contrast', 1.18), ('saturate', 0.88), ('sepia', 0.14), ('hue-rotate', -10)],
+    'hb1': [('contrast', 1.16), ('brightness', 1.02), ('saturate', 0.88), ('hue-rotate', 6)],
+    'hb2': [('contrast', 1.24), ('saturate', 0.94), ('hue-rotate', 8)],
+    'm3':  [('brightness', 1.06), ('contrast', 0.90), ('saturate', 0.70), ('sepia', 0.20), ('hue-rotate', 18)],
+    'm5':  [('brightness', 1.12), ('contrast', 0.80), ('saturate', 0.60), ('sepia', 0.14), ('hue-rotate', -14)],
+    'p5':  [('brightness', 1.04), ('contrast', 1.14), ('saturate', 1.30), ('sepia', 0.08), ('hue-rotate', -6)],
+    's2':  [('brightness', 1.08), ('contrast', 0.95), ('saturate', 0.85), ('sepia', 0.08)],
 }
 
 
-def _apply_filter_preset(rgb, preset_name):
-    from PIL import ImageEnhance
-    params = _FILTER_PRESETS.get(preset_name, {})
-    if not params:
-        return rgb
-    if 'brightness' in params:
-        rgb = ImageEnhance.Brightness(rgb).enhance(params['brightness'])
-    if 'contrast' in params:
-        rgb = ImageEnhance.Contrast(rgb).enhance(params['contrast'])
-    if 'saturation' in params:
-        rgb = ImageEnhance.Color(rgb).enhance(params['saturation'])
-    if 'sepia' in params:
-        rgb = _apply_sepia(rgb, params['sepia'])
-    if 'warm' in params:
-        rgb = _apply_warmth(rgb, params['warm'])
-    return rgb
+def _backup_original(media):
+    """Guarda uma cópia da imagem original no Cloudinary antes do 1º edit destrutivo."""
+    if media.original_url:
+        return
+    backup = cloudinary.uploader.upload(
+        media.cloudinary_url,
+        public_id=f'{media.cloudinary_id}_orig',
+        overwrite=True,
+        resource_type='image',
+    )
+    media.original_url = backup['secure_url']
 
 
 @login_required
@@ -773,7 +808,9 @@ def edit_media_view(request, media_id):
     contrast    = max(0.1, min(3.0, float(data.get('contrast',    1.0))))
     saturation  = max(0.0, min(4.0, float(data.get('saturation',  1.0))))
     sharpness   = max(0.0, min(4.0, float(data.get('sharpness',   1.0))))
-    blur_radius = max(0.0, min(20.0, float(data.get('blur',       0.0))))
+    blur_px     = max(0.0, min(20.0, float(data.get('blur',       0.0))))
+    # Escala preview → imagem real (naturalWidth / largura exibida), p/ blur idêntico ao preview
+    blur_scale  = max(1.0, min(20.0, float(data.get('blur_scale', 1.0))))
     rotation    = int(data.get('rotation', 0)) % 360
     flip_h      = bool(data.get('flip_h', False))
     flip_v      = bool(data.get('flip_v', False))
@@ -793,28 +830,33 @@ def edit_media_view(request, media_id):
     if flip_v:
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
 
-    # Colour / tone adjustments (operate on RGB copy, preserve alpha)
+    # Ajustes de cor na MESMA ordem do preview CSS:
+    # preset → brightness → contrast → saturate → grayscale (→ sharpness → blur)
     rgb = img.convert('RGB')
-    # Apply VSCO filter preset first, then manual adjustments on top
-    if filter_preset and filter_preset != 'normal':
-        rgb = _apply_filter_preset(rgb, filter_preset)
-    if grayscale:
-        rgb = rgb.convert('L').convert('RGB')
+    ops = list(_FILTER_PRESETS.get(filter_preset, []))
     if brightness != 1.0:
-        rgb = ImageEnhance.Brightness(rgb).enhance(brightness)
+        ops.append(('brightness', brightness))
     if contrast != 1.0:
-        rgb = ImageEnhance.Contrast(rgb).enhance(contrast)
+        ops.append(('contrast', contrast))
     if saturation != 1.0:
-        rgb = ImageEnhance.Color(rgb).enhance(saturation)
+        ops.append(('saturate', saturation))
+    if grayscale:
+        ops.append(('grayscale', 1.0))
+    if ops:
+        rgb = _apply_css_filters(rgb, ops)
     if sharpness != 1.0:
         rgb = ImageEnhance.Sharpness(rgb).enhance(sharpness)
-    if blur_radius > 0:
-        rgb = rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+    if blur_px > 0:
+        # CSS blur(px) e o GaussianBlur do Pillow usam desvio-padrão; basta escalar
+        rgb = rgb.filter(ImageFilter.GaussianBlur(radius=min(blur_px * blur_scale, 120.0)))
 
     # Merge back with original alpha channel
     r, g, b = rgb.split()
     a = img.split()[3]
     img = Image.merge('RGBA', (r, g, b, a))
+
+    # Guarda o original antes de sobrescrever (permite "Resetar" depois de salvar)
+    _backup_original(media)
 
     # Upload back (overwrite + CDN invalidate)
     buf = io.BytesIO()
@@ -831,7 +873,35 @@ def edit_media_view(request, media_id):
     )
     media.cloudinary_url = result['secure_url']
     media.save()
-    return JsonResponse({'url': media.cloudinary_url})
+    return JsonResponse({'url': media.cloudinary_url, 'edited': True})
+
+
+@login_required
+@require_POST
+def reset_media_view(request, media_id):
+    """Restaura a imagem original (desfaz todos os edits salvos)."""
+    media = get_object_or_404(Media, id=media_id, uploaded_by=request.user)
+
+    if not media.original_url:
+        return JsonResponse({'url': media.cloudinary_url, 'restored': False})
+
+    result = cloudinary.uploader.upload(
+        media.original_url,
+        public_id=media.cloudinary_id,
+        overwrite=True,
+        invalidate=True,
+        resource_type='image',
+    )
+    media.cloudinary_url = result['secure_url']
+    media.original_url = ''
+    media.save()
+
+    try:
+        cloudinary.uploader.destroy(f'{media.cloudinary_id}_orig', resource_type='image')
+    except Exception:
+        logger.warning('Falha ao remover backup _orig de %s', media.cloudinary_id)
+
+    return JsonResponse({'url': media.cloudinary_url, 'restored': True})
 
 
 @login_required
@@ -859,6 +929,9 @@ def remove_bg_view(request, media_id):
     from PIL import Image
     result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA')
 
+    # Guarda o original antes de sobrescrever (permite "Resetar" depois)
+    _backup_original(media)
+
     buf = io.BytesIO()
     result_img.save(buf, format='PNG')
     buf.seek(0)
@@ -873,7 +946,7 @@ def remove_bg_view(request, media_id):
     )
     media.cloudinary_url = result['secure_url']
     media.save()
-    return JsonResponse({'url': media.cloudinary_url})
+    return JsonResponse({'url': media.cloudinary_url, 'edited': True})
 
 
 # ── COMMENTS ─────────────────────────────────────────────────────────────────

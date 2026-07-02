@@ -129,6 +129,11 @@
       }
       lbInfo.textContent = `${lbIdx + 1} / ${allItems.length}  ·  ${uploader}  ·  ${date}`;
       if (lbDownload) lbDownload.href = `/media/${el.dataset.id}/download/`;
+      const lbShare = document.getElementById('lb-share');
+      if (lbShare) {
+        lbShare.style.display = type === 'video' ? 'none' : '';
+        lbShare.dataset.mediaUrl = url;
+      }
       lightbox.classList.add('open');
 
       // update global currentMediaId for fav/comments
