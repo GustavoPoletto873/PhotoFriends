@@ -1434,6 +1434,57 @@ body {
 }
 .share-preview-wrap img { max-height: 36vh; max-width: 100%; object-fit: contain; }
 .share-hint { font-size: 0.72rem; color: var(--text-subtle); min-height: 1.1rem; margin-bottom: 0.5rem; }
+
+/* Carrossel seamless (estilo CRSEL) */
+.share-section-label {
+    font-size: 0.64rem; font-weight: 800;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--text-subtle);
+    margin-bottom: 0.45rem;
+}
+.share-carousel-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 0.5rem; flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+}
+.share-car-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.share-car-chip {
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    color: rgba(255,255,255,0.85);
+    padding: 0.3rem 0.7rem;
+    font-size: 0.72rem; font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.share-car-chip:hover { border-color: rgba(244,63,142,0.35); }
+.share-car-chip.active { border-color: var(--app-pink); color: var(--app-pink); background: rgba(244,63,142,0.08); }
+.share-ratio-toggle { display: flex; gap: 0.3rem; }
+.share-ratio-btn {
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: rgba(255,255,255,0.7);
+    padding: 0.28rem 0.55rem;
+    font-size: 0.66rem; font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+.share-ratio-btn.active { border-color: var(--app-pink); color: var(--app-pink); }
+.share-carousel-strip {
+    display: flex; gap: 3px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    margin-bottom: 0.7rem;
+}
+.share-carousel-strip img {
+    height: 32vh; flex: 0 0 auto;
+    scroll-snap-align: center;
+    display: block;
+}
 @media (max-width: 520px) {
     .share-dest-grid { grid-template-columns: repeat(3, 1fr); }
 }

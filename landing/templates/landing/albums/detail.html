@@ -192,11 +192,28 @@
   <div class="modal-box share-modal-box">
     <h2 class="modal-title">📤 Compartilhar</h2>
 
+    <div class="share-section-label">Post único</div>
     <div class="share-dest-grid" id="share-dest-grid"></div>
 
-    <div class="share-preview-wrap">
+    <div class="share-section-label">Carrossel seamless — Instagram</div>
+    <div class="share-carousel-bar">
+      <div class="share-car-chips" id="share-car-chips">
+        <button type="button" class="share-car-chip" data-n="2">🎞 2</button>
+        <button type="button" class="share-car-chip" data-n="3">🎞 3</button>
+        <button type="button" class="share-car-chip" data-n="4">🎞 4</button>
+        <button type="button" class="share-car-chip" data-n="5">🎞 5</button>
+        <button type="button" class="share-car-chip" data-n="6">🎞 6</button>
+      </div>
+      <div class="share-ratio-toggle" id="share-ratio-toggle" style="display:none">
+        <button type="button" class="share-ratio-btn active" data-ratio="4:5">4:5</button>
+        <button type="button" class="share-ratio-btn" data-ratio="1:1">1:1</button>
+      </div>
+    </div>
+
+    <div class="share-preview-wrap" id="share-preview-wrap">
       <img id="share-preview-img" src="" alt="Preview do formato">
     </div>
+    <div class="share-carousel-strip" id="share-carousel-strip" style="display:none"></div>
 
     <div class="share-hint" id="share-hint"></div>
 
@@ -669,13 +686,22 @@
 
   const shareModal       = document.getElementById('share-modal');
   const shareDestGrid    = document.getElementById('share-dest-grid');
+  const sharePreviewWrap = document.getElementById('share-preview-wrap');
   const sharePreviewImg  = document.getElementById('share-preview-img');
+  const shareCarChips    = document.getElementById('share-car-chips');
+  const shareRatioToggle = document.getElementById('share-ratio-toggle');
+  const shareCarStrip    = document.getElementById('share-carousel-strip');
   const shareHint        = document.getElementById('share-hint');
   const shareDoBtn       = document.getElementById('share-do-btn');
   const shareDownloadBtn = document.getElementById('share-download-btn');
   const shareOpenLink    = document.getElementById('share-open-link');
   let shareBaseUrl = null;
   let shareDestKey = 'ig_story';
+
+  // Carrossel seamless (estilo CRSEL): a foto é fatiada em N slides contínuos
+  const CAROUSEL_RATIOS = { '4:5': { w: 1080, h: 1350 }, '1:1': { w: 1080, h: 1080 } };
+  let carouselN = 0;        // 0 = post único
+  let carouselRatio = '4:5';
 
   // public_id do Cloudinary a partir da URL ("pasta/arquivo" → "pasta:arquivo" p/ overlay)
   function sharePublicId() {
@@ -709,22 +735,58 @@
       `/image/upload/${shareTransform(dest, w, h, 'q_auto:low').join('/')}/`);
   }
 
+  // Slide i de n: redimensiona a foto para o canvas total (n×largura) e recorta a fatia
+  function carouselSlideUrl(i, n, opts) {
+    const r = CAROUSEL_RATIOS[carouselRatio];
+    const scale = (opts && opts.previewWidth) ? opts.previewWidth / r.w : 1;
+    const sw = Math.round(r.w * scale), sh = Math.round(r.h * scale);
+    const parts = [
+      `w_${sw * n},h_${sh},c_fill`,
+      `c_crop,w_${sw},h_${sh},x_${i * sw}`,
+      `f_jpg,${scale < 1 ? 'q_auto:low' : 'q_auto:good'}` +
+        ((opts && opts.attachment) ? `,fl_attachment:photo-friends-${i + 1}` : ''),
+    ];
+    return shareBaseUrl.replace('/image/upload/', `/image/upload/${parts.join('/')}/`);
+  }
+
   function updateShareUI() {
+    const single = carouselN === 0;
     const dest = SHARE_DESTS.find(d => d.key === shareDestKey);
     shareDestGrid.querySelectorAll('.share-dest-chip').forEach(c =>
-      c.classList.toggle('active', c.dataset.key === dest.key));
-    sharePreviewImg.src = shareUrlFor(dest);
-    shareDownloadBtn.href = shareUrlFor(dest, { attachment: true });
-    if (dest.link) {
-      shareOpenLink.style.display = '';
-      shareOpenLink.href = dest.link(shareUrlFor(dest));
-      shareOpenLink.textContent = `Abrir ${dest.label}`;
-      shareHint.textContent = `Formatada para ${dest.net}. No celular, “Compartilhar” abre o app direto.`;
-    } else {
-      shareOpenLink.style.display = 'none';
-      shareHint.textContent = `Formatada para ${dest.net} (${dest.ratio}). No celular, “Compartilhar” abre o Instagram direto; no computador, baixe e poste pelo app.`;
-    }
+      c.classList.toggle('active', single && c.dataset.key === dest.key));
+    shareCarChips.querySelectorAll('.share-car-chip').forEach(c =>
+      c.classList.toggle('active', !single && +c.dataset.n === carouselN));
+    shareRatioToggle.style.display = single ? 'none' : '';
+    sharePreviewWrap.style.display = single ? '' : 'none';
+    shareCarStrip.style.display = single ? 'none' : 'flex';
     shareHint.style.color = 'var(--text-subtle)';
+
+    if (single) {
+      sharePreviewImg.src = shareUrlFor(dest);
+      shareDownloadBtn.href = shareUrlFor(dest, { attachment: true });
+      if (dest.link) {
+        shareOpenLink.style.display = '';
+        shareOpenLink.href = dest.link(shareUrlFor(dest));
+        shareOpenLink.textContent = `Abrir ${dest.label}`;
+        shareHint.textContent = `Formatada para ${dest.net}. No celular, “Compartilhar” abre o app direto.`;
+      } else {
+        shareOpenLink.style.display = 'none';
+        shareHint.textContent = `Formatada para ${dest.net} (${dest.ratio}). No celular, “Compartilhar” abre o Instagram direto; no computador, baixe e poste pelo app.`;
+      }
+      return;
+    }
+
+    // Carrossel: monta o preview fatiado (deslize para simular o swipe)
+    shareOpenLink.style.display = 'none';
+    shareDownloadBtn.href = '#';
+    shareCarStrip.innerHTML = '';
+    for (let i = 0; i < carouselN; i++) {
+      const img = document.createElement('img');
+      img.src = carouselSlideUrl(i, carouselN, { previewWidth: 360 });
+      img.alt = `Slide ${i + 1}`;
+      shareCarStrip.appendChild(img);
+    }
+    shareHint.textContent = `Carrossel de ${carouselN} slides (${carouselRatio}) — deslize o preview para ver o efeito. No celular, “Compartilhar” envia todos os slides para o Instagram; “Baixar” salva um por um.`;
   }
 
   function buildShareChips() {
@@ -743,14 +805,27 @@
       ratio.className = 'share-dest-ratio';
       ratio.textContent = dest.ratio;
       chip.append(img, label, ratio);
-      chip.addEventListener('click', () => { shareDestKey = dest.key; updateShareUI(); });
+      chip.addEventListener('click', () => { shareDestKey = dest.key; carouselN = 0; updateShareUI(); });
       shareDestGrid.appendChild(chip);
     });
   }
 
+  shareCarChips.querySelectorAll('.share-car-chip').forEach(chip => {
+    chip.addEventListener('click', () => { carouselN = +chip.dataset.n; updateShareUI(); });
+  });
+  shareRatioToggle.querySelectorAll('.share-ratio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      carouselRatio = btn.dataset.ratio;
+      shareRatioToggle.querySelectorAll('.share-ratio-btn').forEach(b =>
+        b.classList.toggle('active', b === btn));
+      updateShareUI();
+    });
+  });
+
   function openShareModal(mediaUrl) {
     if (!mediaUrl) return;
     shareBaseUrl = mediaUrl.split('?')[0];
+    carouselN = 0;
     buildShareChips();
     updateShareUI();
     shareModal.classList.add('open');
@@ -767,27 +842,66 @@
     openShareModal(this.dataset.mediaUrl);
   });
 
+  function downloadCarouselSlides() {
+    for (let i = 0; i < carouselN; i++) {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = carouselSlideUrl(i, carouselN, { attachment: true });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, i * 600);
+    }
+  }
+
+  shareDownloadBtn.addEventListener('click', e => {
+    if (carouselN === 0) return; // post único: o próprio href baixa
+    e.preventDefault();
+    downloadCarouselSlides();
+    shareHint.textContent = `Baixando ${carouselN} slides...`;
+  });
+
   shareDoBtn.addEventListener('click', async () => {
-    const dest = SHARE_DESTS.find(d => d.key === shareDestKey);
-    const url = shareUrlFor(dest);
     shareDoBtn.disabled = true;
-    shareHint.textContent = 'Preparando imagem...';
+    shareHint.style.color = 'var(--text-subtle)';
     try {
-      const blob = await (await fetch(url)).blob();
-      const file = new File([blob], 'photo-friends.jpg', { type: 'image/jpeg' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        // Celular: abre o menu nativo já com a imagem formatada
-        await navigator.share({ files: [file], title: 'Photo Friends' });
-        shareHint.textContent = '✓ Compartilhado!';
-        shareHint.style.color = '#43e97b';
-      } else if (dest.link) {
-        // Desktop: abre a rede em nova aba com o link da imagem formatada
-        window.open(dest.link(url), '_blank', 'noopener');
-        shareHint.textContent = `${dest.net} aberto em nova aba.`;
+      if (carouselN > 0) {
+        // Carrossel: compartilha todos os slides de uma vez — no Instagram
+        // isso abre o composer já com as imagens na ordem
+        shareHint.textContent = `Preparando ${carouselN} slides...`;
+        const files = [];
+        for (let i = 0; i < carouselN; i++) {
+          const blob = await (await fetch(carouselSlideUrl(i, carouselN))).blob();
+          files.push(new File([blob], `photo-friends-${i + 1}.jpg`, { type: 'image/jpeg' }));
+        }
+        if (navigator.canShare && navigator.canShare({ files })) {
+          await navigator.share({ files, title: 'Photo Friends' });
+          shareHint.textContent = '✓ Compartilhado!';
+          shareHint.style.color = '#43e97b';
+        } else {
+          downloadCarouselSlides();
+          shareHint.textContent = 'Slides baixados — monte o carrossel no app do Instagram.';
+        }
       } else {
-        // Desktop + Instagram: não há como postar via web — baixa a imagem formatada
-        shareDownloadBtn.click();
-        shareHint.textContent = 'Imagem baixada — poste pelo app do Instagram.';
+        const dest = SHARE_DESTS.find(d => d.key === shareDestKey);
+        const url = shareUrlFor(dest);
+        shareHint.textContent = 'Preparando imagem...';
+        const blob = await (await fetch(url)).blob();
+        const file = new File([blob], 'photo-friends.jpg', { type: 'image/jpeg' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          // Celular: abre o menu nativo já com a imagem formatada
+          await navigator.share({ files: [file], title: 'Photo Friends' });
+          shareHint.textContent = '✓ Compartilhado!';
+          shareHint.style.color = '#43e97b';
+        } else if (dest.link) {
+          // Desktop: abre a rede em nova aba com o link da imagem formatada
+          window.open(dest.link(url), '_blank', 'noopener');
+          shareHint.textContent = `${dest.net} aberto em nova aba.`;
+        } else {
+          // Desktop + Instagram: não há como postar via web — baixa a imagem formatada
+          shareDownloadBtn.click();
+          shareHint.textContent = 'Imagem baixada — poste pelo app do Instagram.';
+        }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
