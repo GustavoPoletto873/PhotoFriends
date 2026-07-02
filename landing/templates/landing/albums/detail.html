@@ -241,7 +241,11 @@
 
       <!-- Preview -->
       <div class="photo-editor-preview">
-        <img id="editor-preview-img" src="" alt="Preview">
+        <div class="editor-canvas-wrap" id="editor-canvas-wrap">
+          <img id="editor-preview-img" src="" alt="Preview">
+          <div class="editor-frame-overlay" id="editor-frame-overlay"></div>
+          <div class="editor-deco-layer" id="editor-deco-layer"></div>
+        </div>
       </div>
 
       <!-- Controls -->
@@ -286,6 +290,41 @@
               <input type="range" id="sl-blur" min="0" max="10" step="0.5" value="0">
               <span class="editor-slider-val" id="val-blur">0</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Decorar: molduras, stickers e texto (estilo CRSEL) -->
+        <div>
+          <div class="editor-section-label">Decorar</div>
+          <div class="editor-btn-grid" style="margin-bottom:0.6rem">
+            <button type="button" class="editor-action-btn deco-tab" data-tab="frames">🖼 Moldura</button>
+            <button type="button" class="editor-action-btn deco-tab" data-tab="stickers">🌸 Stickers</button>
+            <button type="button" class="editor-action-btn deco-tab" data-tab="text">✎ Texto</button>
+          </div>
+
+          <div class="deco-panel" id="deco-panel-frames" style="display:none">
+            <div class="deco-chip-row">
+              <button type="button" class="deco-chip active" data-frame="none">Nenhuma</button>
+              <button type="button" class="deco-chip" data-frame="digital">Digital</button>
+              <button type="button" class="deco-chip" data-frame="film">Film</button>
+              <button type="button" class="deco-chip" data-frame="polaroid">Polaroid</button>
+            </div>
+          </div>
+
+          <div class="deco-panel" id="deco-panel-stickers" style="display:none">
+            <div class="deco-sticker-grid" id="deco-sticker-grid"></div>
+          </div>
+
+          <div class="deco-panel" id="deco-panel-text" style="display:none">
+            <button type="button" class="editor-action-btn" id="deco-add-text" style="width:100%;justify-content:center">+ Adicionar texto</button>
+            <div id="deco-text-opts" style="display:none;margin-top:0.5rem">
+              <div class="deco-chip-row" id="deco-font-chips"></div>
+              <div class="deco-color-row" id="deco-color-chips"></div>
+            </div>
+          </div>
+
+          <div class="deco-hint" id="deco-hint" style="display:none">
+            Arraste para mover · alça ⤡ gira e redimensiona · toque 2× no texto para editar
           </div>
         </div>
 
@@ -427,11 +466,35 @@
     filterPreset: 'normal',
   };
 
+  const canvasWrap = document.getElementById('editor-canvas-wrap');
+
+  // Dimensiona o wrapper (imagem + decorações) para caber no preview,
+  // considerando a rotação atual
+  function sizeCanvasWrap() {
+    const box = document.querySelector('.photo-editor-preview');
+    const iw = editorImg.naturalWidth, ih = editorImg.naturalHeight;
+    if (!box || !iw || !ih) return;
+    const cs = getComputedStyle(box);
+    const innerW = box.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const innerH = box.clientHeight - parseFloat(cs.paddingTop)  - parseFloat(cs.paddingBottom);
+    const rot90 = state.rotation % 180 !== 0;
+    const k = Math.min(innerW / (rot90 ? ih : iw), innerH / (rot90 ? iw : ih));
+    canvasWrap.style.width  = Math.max(1, iw * k) + 'px';
+    canvasWrap.style.height = Math.max(1, ih * k) + 'px';
+    renderFramePreview();
+    renderDecoItems();
+  }
+  editorImg.addEventListener('load', sizeCanvasWrap);
+  window.addEventListener('resize', () => {
+    if (editorOverlay.classList.contains('open')) sizeCanvasWrap();
+  });
+
   function applyPreview() {
     const rot = state.rotation;
     const sx  = state.flipH ? -1 : 1;
     const sy  = state.flipV ? -1 : 1;
-    editorImg.style.transform = `rotate(${rot}deg) scaleX(${sx}) scaleY(${sy})`;
+    // rotação/flip no wrapper: as decorações giram junto com a foto
+    canvasWrap.style.transform = `rotate(${rot}deg) scaleX(${sx}) scaleY(${sy})`;
     const presetCss = VSCO_FILTERS.find(f => f.key === state.filterPreset)?.css || '';
     const sliderCss = [
       `brightness(${state.brightness})`,
@@ -441,6 +504,7 @@
       state.blur > 0 ? `blur(${state.blur}px)` : '',
     ].filter(Boolean).join(' ');
     editorImg.style.filter = [presetCss, sliderCss].filter(Boolean).join(' ');
+    sizeCanvasWrap();
   }
 
   function buildFilterStrip(url) {
@@ -482,6 +546,7 @@
     strip.querySelectorAll('.editor-filter-chip').forEach(c =>
       c.classList.toggle('active', c.dataset.key === 'normal')
     );
+    resetDecorations();
     if (editorOriginalUrl) editorImg.src = editorOriginalUrl;
     applyPreview();
   }
@@ -530,6 +595,328 @@
     this.classList.toggle('active', state.grayscale);
     applyPreview();
   });
+
+  // ── DECORAÇÕES: molduras, stickers e texto (estilo CRSEL) ────────────────
+  const decoLayer    = document.getElementById('editor-deco-layer');
+  const frameOverlay = document.getElementById('editor-frame-overlay');
+  const decoHint     = document.getElementById('deco-hint');
+  const decoTextOpts = document.getElementById('deco-text-opts');
+
+  const DECO_STICKERS = ['🌸','💖','✨','🔥','⭐','🌈','🍒','🦋','😎','🥰','🎀','🌵',
+                         '🍕','🎧','🏝️','🌙','⚡','❤️','😂','👑','💫','🫶','🍓','🎉'];
+  const DECO_FONTS = [
+    { key: 'classic', label: 'Classic', family: 'Arial, sans-serif' },
+    { key: 'serif',   label: 'Serif',   family: 'Georgia, serif' },
+    { key: 'type',    label: 'Type',    family: '"Courier New", monospace' },
+    { key: 'impact',  label: 'Impact',  family: 'Impact, "Arial Black", sans-serif' },
+    { key: 'script',  label: 'Script',  family: '"Brush Script MT", "Segoe Script", cursive' },
+  ];
+  const DECO_COLORS = ['#ffffff', '#111111', '#f43f8e', '#fbbf24', '#38bdf8', '#43e97b'];
+  const DECO_SIZE = { emoji: 0.14, text: 0.075 };  // fração da largura da foto
+
+  let decoItems = [];      // {id, type:'emoji'|'text', content, x, y, scale, angle, font, color}
+  let decoFrame = 'none';
+  let decoSelected = null;
+  let decoIdSeq = 1;
+  let decoTabOpen = null;
+
+  // Tabs
+  document.querySelectorAll('.deco-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      decoTabOpen = decoTabOpen === tab.dataset.tab ? null : tab.dataset.tab;
+      document.querySelectorAll('.deco-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.tab === decoTabOpen));
+      ['frames', 'stickers', 'text'].forEach(k =>
+        document.getElementById(`deco-panel-${k}`).style.display = k === decoTabOpen ? '' : 'none');
+      decoHint.style.display = (decoTabOpen === 'stickers' || decoTabOpen === 'text') ? '' : 'none';
+    });
+  });
+
+  // Molduras
+  document.querySelectorAll('#deco-panel-frames .deco-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      decoFrame = chip.dataset.frame;
+      document.querySelectorAll('#deco-panel-frames .deco-chip').forEach(c =>
+        c.classList.toggle('active', c === chip));
+      renderFramePreview();
+    });
+  });
+
+  function renderFramePreview() {
+    const w = canvasWrap.offsetWidth, h = canvasWrap.offsetHeight;
+    frameOverlay.innerHTML = '';
+    frameOverlay.style.border = 'none';
+    if (decoFrame === 'digital') {
+      frameOverlay.style.border = `${Math.max(2, w * 0.015)}px solid #fff`;
+    } else if (decoFrame === 'polaroid') {
+      const s = w * 0.045;
+      frameOverlay.style.border = 'solid #fff';
+      frameOverlay.style.borderWidth = `${s}px ${s}px ${w * 0.16}px ${s}px`;
+    } else if (decoFrame === 'film') {
+      const bar = h * 0.1, hw = w * 0.03, gap = w * 0.045;
+      ['top', 'bottom'].forEach(pos => {
+        const d = document.createElement('div');
+        d.style.cssText = `position:absolute;left:0;right:0;height:${bar}px;background:#000;${pos}:0`;
+        const holes = document.createElement('div');
+        holes.style.cssText = `position:absolute;left:0;right:0;top:${bar * 0.3}px;height:${bar * 0.4}px;` +
+          `background:repeating-linear-gradient(90deg, transparent 0 ${gap}px, #fff ${gap}px ${gap + hw}px)`;
+        d.appendChild(holes);
+        frameOverlay.appendChild(d);
+      });
+    }
+  }
+
+  // Converte coordenadas do ponteiro para o espaço SEM rotação/flip da foto (0..1)
+  function pointerToLocal(e) {
+    const r = canvasWrap.getBoundingClientRect();
+    const dxs = e.clientX - (r.left + r.width / 2);
+    const dys = e.clientY - (r.top + r.height / 2);
+    const th = -state.rotation * Math.PI / 180;
+    let x = dxs * Math.cos(th) - dys * Math.sin(th);
+    let y = dxs * Math.sin(th) + dys * Math.cos(th);
+    if (state.flipH) x = -x;
+    if (state.flipV) y = -y;
+    return { x: x / canvasWrap.offsetWidth + 0.5, y: y / canvasWrap.offsetHeight + 0.5 };
+  }
+
+  function decoFontPx(item, width) {
+    return item.scale * width * DECO_SIZE[item.type];
+  }
+
+  function positionItem(item) {
+    const el = decoLayer.querySelector(`[data-id="${item.id}"]`);
+    if (!el) return;
+    el.style.left = (item.x * 100) + '%';
+    el.style.top  = (item.y * 100) + '%';
+    el.style.transform = `translate(-50%,-50%) rotate(${item.angle}deg)`;
+  }
+
+  function renderDecoItems() {
+    decoLayer.innerHTML = '';
+    const W = canvasWrap.offsetWidth;
+    decoItems.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'deco-item' + (decoSelected === item.id ? ' selected' : '');
+      el.dataset.id = item.id;
+      const span = document.createElement('span');
+      span.textContent = item.content;
+      span.style.fontSize = decoFontPx(item, W) + 'px';
+      if (item.type === 'text') {
+        span.style.fontFamily = DECO_FONTS.find(f => f.key === item.font).family;
+        span.style.color = item.color;
+        span.style.fontWeight = '700';
+        span.style.whiteSpace = 'nowrap';
+        span.style.textShadow = '0 1px 8px rgba(0,0,0,0.35)';
+      }
+      el.appendChild(span);
+      if (decoSelected === item.id) {
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'deco-del'; del.textContent = '✕';
+        del.addEventListener('pointerdown', e => e.stopPropagation());
+        del.addEventListener('click', e => {
+          e.stopPropagation();
+          decoItems = decoItems.filter(i => i.id !== item.id);
+          decoSelected = null;
+          renderDecoItems();
+        });
+        const hnd = document.createElement('div');
+        hnd.className = 'deco-handle'; hnd.textContent = '⤡';
+        hnd.addEventListener('pointerdown', e => startHandleDrag(e, item));
+        el.append(del, hnd);
+      }
+      el.addEventListener('pointerdown', e => startItemDrag(e, item));
+      decoLayer.appendChild(el);
+      positionItem(item);
+    });
+    updateDecoTextOpts();
+  }
+
+  function startItemDrag(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    // toque duplo em texto = editar
+    const now = Date.now();
+    if (item.type === 'text' && decoSelected === item.id && now - (item._lastTap || 0) < 350) {
+      item._lastTap = 0;
+      editTextItem(item);
+      return;
+    }
+    item._lastTap = now;
+    if (decoSelected !== item.id) { decoSelected = item.id; renderDecoItems(); }
+    const start = pointerToLocal(e);
+    const ox = item.x - start.x, oy = item.y - start.y;
+    const move = ev => {
+      const p = pointerToLocal(ev);
+      item.x = Math.min(1.05, Math.max(-0.05, p.x + ox));
+      item.y = Math.min(1.05, Math.max(-0.05, p.y + oy));
+      positionItem(item);
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  }
+
+  function startHandleDrag(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    const W = canvasWrap.offsetWidth, H = canvasWrap.offsetHeight;
+    const p0 = pointerToLocal(e);
+    const dx0 = (p0.x - item.x) * W, dy0 = (p0.y - item.y) * H;
+    const d0 = Math.hypot(dx0, dy0) || 1;
+    const a0 = Math.atan2(dy0, dx0);
+    const s0 = item.scale, ang0 = item.angle;
+    const move = ev => {
+      const p = pointerToLocal(ev);
+      const dx = (p.x - item.x) * W, dy = (p.y - item.y) * H;
+      item.scale = Math.min(8, Math.max(0.2, s0 * (Math.hypot(dx, dy) / d0)));
+      item.angle = ang0 + (Math.atan2(dy, dx) - a0) * 180 / Math.PI;
+      const span = decoLayer.querySelector(`[data-id="${item.id}"] span`);
+      if (span) span.style.fontSize = decoFontPx(item, W) + 'px';
+      positionItem(item);
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  }
+
+  // Clique fora de um item = desselecionar
+  canvasWrap.addEventListener('pointerdown', e => {
+    if (!e.target.closest('.deco-item') && decoSelected !== null) {
+      decoSelected = null;
+      renderDecoItems();
+    }
+  });
+
+  function addDecoItem(type, content) {
+    const item = { id: decoIdSeq++, type, content, x: 0.5, y: 0.5, scale: 1, angle: 0,
+                   font: 'classic', color: '#ffffff' };
+    decoItems.push(item);
+    decoSelected = item.id;
+    renderDecoItems();
+  }
+
+  // Stickers
+  const stickerGrid = document.getElementById('deco-sticker-grid');
+  DECO_STICKERS.forEach(s => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'deco-sticker-btn'; b.textContent = s;
+    b.addEventListener('click', () => addDecoItem('emoji', s));
+    stickerGrid.appendChild(b);
+  });
+
+  // Texto
+  document.getElementById('deco-add-text').addEventListener('click', () => {
+    const t = prompt('Digite o texto:', '');
+    if (t && t.trim()) addDecoItem('text', t.trim());
+  });
+  function editTextItem(item) {
+    const t = prompt('Editar texto:', item.content);
+    if (t !== null && t.trim()) { item.content = t.trim(); renderDecoItems(); }
+  }
+
+  const fontChipsBox = document.getElementById('deco-font-chips');
+  DECO_FONTS.forEach(f => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'deco-chip'; b.dataset.font = f.key;
+    b.textContent = f.label;
+    b.style.fontFamily = f.family;
+    b.addEventListener('click', () => {
+      const it = decoItems.find(i => i.id === decoSelected);
+      if (it && it.type === 'text') { it.font = f.key; renderDecoItems(); }
+    });
+    fontChipsBox.appendChild(b);
+  });
+  const colorChipsBox = document.getElementById('deco-color-chips');
+  DECO_COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'deco-color-btn'; b.dataset.color = c;
+    b.style.background = c;
+    b.addEventListener('click', () => {
+      const it = decoItems.find(i => i.id === decoSelected);
+      if (it && it.type === 'text') { it.color = c; renderDecoItems(); }
+    });
+    colorChipsBox.appendChild(b);
+  });
+
+  function updateDecoTextOpts() {
+    const it = decoItems.find(i => i.id === decoSelected);
+    const isText = !!(it && it.type === 'text');
+    decoTextOpts.style.display = isText ? '' : 'none';
+    if (!isText) return;
+    fontChipsBox.querySelectorAll('.deco-chip').forEach(b =>
+      b.classList.toggle('active', b.dataset.font === it.font));
+    colorChipsBox.querySelectorAll('.deco-color-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.color === it.color));
+  }
+
+  // Renderiza molduras + itens num PNG transparente na resolução da foto
+  // (mesmas proporções do preview; o servidor compõe por cima após os filtros)
+  function renderDecoOverlayBlob() {
+    if (decoFrame === 'none' && decoItems.length === 0) return Promise.resolve(null);
+    const W = editorImg.naturalWidth, H = editorImg.naturalHeight;
+    if (!W || !H) return Promise.resolve(null);
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    if (decoFrame === 'digital') {
+      const bw = Math.max(2, W * 0.015);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, W, bw); ctx.fillRect(0, H - bw, W, bw);
+      ctx.fillRect(0, 0, bw, H); ctx.fillRect(W - bw, 0, bw, H);
+    } else if (decoFrame === 'polaroid') {
+      const s = W * 0.045, b = W * 0.16;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, W, s); ctx.fillRect(0, H - b, W, b);
+      ctx.fillRect(0, 0, s, H); ctx.fillRect(W - s, 0, s, H);
+    } else if (decoFrame === 'film') {
+      const bar = H * 0.1, hw = W * 0.03, gap = W * 0.045, hh = bar * 0.4;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+      ctx.fillStyle = '#fff';
+      [bar * 0.3, H - bar + bar * 0.3].forEach(y => {
+        for (let x = gap; x + hw < W; x += hw + gap) ctx.fillRect(x, y, hw, hh);
+      });
+    }
+
+    decoItems.forEach(item => {
+      ctx.save();
+      ctx.translate(item.x * W, item.y * H);
+      ctx.rotate(item.angle * Math.PI / 180);
+      const fontPx = decoFontPx(item, W);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (item.type === 'text') {
+        ctx.font = `700 ${fontPx}px ${DECO_FONTS.find(f => f.key === item.font).family}`;
+        ctx.fillStyle = item.color;
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = fontPx * 0.12;
+        ctx.shadowOffsetY = fontPx * 0.02;
+      } else {
+        ctx.font = `${fontPx}px sans-serif`;
+      }
+      ctx.fillText(item.content, 0, 0);
+      ctx.restore();
+    });
+
+    return new Promise(res => canvas.toBlob(res, 'image/png'));
+  }
+
+  function resetDecorations() {
+    decoItems = [];
+    decoSelected = null;
+    decoFrame = 'none';
+    document.querySelectorAll('#deco-panel-frames .deco-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.frame === 'none'));
+    renderDecoItems();
+    renderFramePreview();
+  }
 
   // Sliders
   [['brightness',1],['contrast',1],['saturation',1],['sharpness',1],['blur',0]].forEach(([key, def]) => {
@@ -600,20 +987,33 @@
     editorSaveMsg.style.color = 'var(--text-subtle)';
     editorSaveMsg.textContent = 'Salvando...';
     try {
-      const res = await fetch(`/media/${editorMediaId}/edit/`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          brightness: state.brightness, contrast: state.contrast,
-          saturation: state.saturation, sharpness: state.sharpness,
-          blur: state.blur,
-          // escala preview → resolução real, p/ desfoque salvo igual ao do preview
-          blur_scale: Math.max(1, editorImg.naturalWidth / Math.max(1, editorImg.clientWidth)),
-          rotation: state.rotation,
-          flip_h: state.flipH, flip_v: state.flipV, grayscale: state.grayscale,
-          filter: state.filterPreset,
-        }),
-      });
+      const params = {
+        brightness: state.brightness, contrast: state.contrast,
+        saturation: state.saturation, sharpness: state.sharpness,
+        blur: state.blur,
+        // escala preview → resolução real, p/ desfoque salvo igual ao do preview
+        blur_scale: Math.max(1, editorImg.naturalWidth / Math.max(1, editorImg.clientWidth)),
+        rotation: state.rotation,
+        flip_h: state.flipH, flip_v: state.flipV, grayscale: state.grayscale,
+        filter: state.filterPreset,
+      };
+      // Com decorações: envia também a camada PNG renderizada na resolução da foto
+      const overlayBlob = await renderDecoOverlayBlob();
+      let res;
+      if (overlayBlob) {
+        const fd = new FormData();
+        fd.append('params', JSON.stringify(params));
+        fd.append('overlay', overlayBlob, 'overlay.png');
+        res = await fetch(`/media/${editorMediaId}/edit/`, {
+          method: 'POST', headers: {'X-CSRFToken': CSRF}, body: fd,
+        });
+      } else {
+        res = await fetch(`/media/${editorMediaId}/edit/`, {
+          method: 'POST',
+          headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
+          body: JSON.stringify(params),
+        });
+      }
       const data = await res.json();
       if (res.ok) {
         editorSaveMsg.textContent = '✓ Salvo!';

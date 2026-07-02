@@ -799,8 +799,14 @@ def edit_media_view(request, media_id):
 
     media = get_object_or_404(Media, id=media_id, uploaded_by=request.user)
 
+    # JSON puro (só ajustes) ou multipart (ajustes + camada de decoração PNG)
+    overlay_file = None
     try:
-        data = json.loads(request.body)
+        if request.content_type and 'multipart' in request.content_type:
+            data = json.loads(request.POST.get('params', '{}'))
+            overlay_file = request.FILES.get('overlay')
+        else:
+            data = json.loads(request.body)
     except Exception:
         return JsonResponse({'error': 'Dados inválidos'}, status=400)
 
@@ -854,6 +860,25 @@ def edit_media_view(request, media_id):
     r, g, b = rgb.split()
     a = img.split()[3]
     img = Image.merge('RGBA', (r, g, b, a))
+
+    # Camada de decoração (molduras/stickers/texto) desenhada no cliente em
+    # coordenadas SEM rotação — aplica a mesma transformação geométrica da foto
+    # e compõe por cima (decoração não recebe filtros de cor/blur)
+    if overlay_file:
+        try:
+            ov = Image.open(overlay_file).convert('RGBA')
+            if rotation:
+                ov = ov.rotate(-rotation, expand=True, resample=Image.BICUBIC)
+            if flip_h:
+                ov = ov.transpose(Image.FLIP_LEFT_RIGHT)
+            if flip_v:
+                ov = ov.transpose(Image.FLIP_TOP_BOTTOM)
+            if ov.size != img.size:
+                ov = ov.resize(img.size, resample=Image.BICUBIC)
+            img = Image.alpha_composite(img, ov)
+        except Exception:
+            logger.exception('Falha ao compor camada de decoração em media %s', media.id)
+            return JsonResponse({'error': 'Erro ao aplicar decorações'}, status=400)
 
     # Guarda o original antes de sobrescrever (permite "Resetar" depois de salvar)
     _backup_original(media)
